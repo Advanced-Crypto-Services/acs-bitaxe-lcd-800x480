@@ -16,7 +16,7 @@
 #include "wifiFeatures.h"
 #include "Clock.h"
 #include "modelPresets.h"
-
+#include "lcdSettings.h"
 
 #define MASK_WIDTH 300
 #define MASK_HEIGHT 64
@@ -2187,11 +2187,22 @@ void settingsScreen()
     lv_obj_add_style(screenBrightnessSlider, &style_knob, LV_PART_KNOB);
 
     // screen brightness label
-    lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
-    lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS");
-    lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+
+    if (backlightPWM) {
+        lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
+        lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS");
+        lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
+        lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
+        lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+        lv_slider_set_value(screenBrightnessSlider, 100, LV_ANIM_OFF);
+    } else {
+        lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
+        lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS NOT AVAILABLE");
+        lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
+        lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
+        lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+        lv_slider_set_value(screenBrightnessSlider, 0, LV_ANIM_OFF);
+    }
 
 
     // Asic Settings Container

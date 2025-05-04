@@ -5,7 +5,7 @@
 
 #define SMOOTHING_WINDOW_SIZE 5
 
-extern bool backlightPWM;
+
 
 extern const lv_img_dsc_t Logos;
 extern const lv_img_dsc_t Splash;

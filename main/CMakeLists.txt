@@ -25,6 +25,7 @@ idf_component_register(
     "httpServer.cpp"
     "Clock.cpp"
     "modelPresets.cpp"
+    "lcdSettings.cpp"
     INCLUDE_DIRS 
     "."
     "../include"
