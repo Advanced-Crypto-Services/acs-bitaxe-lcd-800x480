@@ -8,15 +8,23 @@
 #include <lvgl.h>
 #include "mempoolAPI.h"
 
-static lv_obj_t* blockClockLabel;
-static lv_obj_t* halvingLabel;
+
+
 static bool clockContainerShown = true;
 static bool blockClockContainerShown = false;
+static bool btcPriceContainerShown = false;
+ bool enableClockScreen = true;
+ bool enableBlockScreen = true;
+ bool enableBtcPriceScreen = true;
 
 lv_timer_t* clockUpdateTimer = nullptr;
 
-lv_obj_t* clockLabel = nullptr;
-lv_obj_t* dateLabel = nullptr;
+static lv_obj_t* clockLabel = nullptr;
+static lv_obj_t* dateLabel = nullptr;
+static lv_obj_t* btcPriceLabel = nullptr;
+static lv_obj_t* blockClockLabel = nullptr;
+static lv_obj_t* halvingLabel = nullptr;
+static lv_obj_t* btcConversionLabel = nullptr;
 
 // This is used because Timelib day function is having issues
 static const char* customDayStr(uint8_t day)
@@ -26,55 +34,64 @@ static const char* customDayStr(uint8_t day)
     return days[day];
 }
 
+// Returns the next enabled screen index (0: clock, 1: block, 2: third)
+static int getNextEnabledScreen(int current) {
+    for (int i = 1; i <= 3; ++i) { // Try next 3 screens (wrap around)
+        int next = (current + i) % 3;
+        if ((next == 0 && enableClockScreen) ||
+            (next == 1 && enableBlockScreen) ||
+            (next == 2 && enableBtcPriceScreen)) {
+            return next;
+        }
+    }
+    return current; // fallback, should not happen
+}
+
 static void clockContainerEventCallback(lv_event_t* e)
-
-
 {
     lv_obj_t* obj = lv_event_get_target(e);
     if (lv_obj_has_flag(obj, LV_OBJ_FLAG_CLICKABLE))
     {
-        Serial.println("Clock Container Clicked");
-        clockContainerShown = !clockContainerShown;
-        blockClockContainerShown = !blockClockContainerShown;
+        // Find current screen index
+        int currentScreen = 0;
+        if (blockClockContainerShown) currentScreen = 1;
+        else if (btcPriceContainerShown) currentScreen = 2;
 
-        if (clockContainerShown && blockClockContainerShown)
-        {
-            clockContainerShown = true;
-            blockClockContainerShown = false;
+        // Get next enabled screen
+        int nextScreen = getNextEnabledScreen(currentScreen);
 
-        }
-        else if (!clockContainerShown && !blockClockContainerShown)
-        {
-            clockContainerShown = true;
-            blockClockContainerShown = false;
-        }
+        // Reset all
+        clockContainerShown = false;
+        blockClockContainerShown = false;
+        btcPriceContainerShown = false;
 
-        if (clockContainerShown)
-        {
-            lvgl_port_lock(10);
-            lv_obj_add_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
+        // Set the next screen
+        if (nextScreen == 0) clockContainerShown = true;
+        else if (nextScreen == 1) blockClockContainerShown = true;
+        else if (nextScreen == 2) btcPriceContainerShown = true;
+
+        // Update visibility
+        lvgl_port_lock(10);
+        lv_obj_add_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(btcPriceLabel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(btcConversionLabel, LV_OBJ_FLAG_HIDDEN);
+
+        if (clockContainerShown) {
             lv_obj_clear_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            lvgl_port_unlock();
-        }
-
-        else if (blockClockContainerShown)
-        {
-            lvgl_port_lock(10);
+        } else if (blockClockContainerShown) {
             lv_obj_clear_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            lvgl_port_unlock();
+        } else if (btcPriceContainerShown) {
+            lv_obj_clear_flag(btcPriceLabel, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(btcConversionLabel, LV_OBJ_FLAG_HIDDEN);
         }
-
-            
-
+        lvgl_port_unlock();
     }
 }
-
-
 
 void homeScreen() 
 {
@@ -137,11 +154,24 @@ void homeScreen()
     lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
     //lv_obj_set_style_border_width(dateLabel, 1, LV_PART_MAIN);
 
+    // Create the btc price label
+    btcPriceLabel = lv_label_create(clockContainer);
+    lv_label_set_text(btcPriceLabel, "$--");
+    lv_obj_set_style_text_font(btcPriceLabel, theme->fontExtraBold144, LV_PART_MAIN);
+    lv_obj_set_style_text_color(btcPriceLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align(btcPriceLabel, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_text_align(btcPriceLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_add_flag(btcPriceLabel, LV_OBJ_FLAG_HIDDEN);
 
-    //lv_obj_set_style_border_color(dateLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-
-
-    
+    // Create the btc conversion label
+    btcConversionLabel = lv_label_create(clockContainer);
+    lv_label_set_text(btcConversionLabel, "BTC/USD");
+    lv_obj_set_style_text_font(btcConversionLabel, theme->fontExtraBold32, LV_PART_MAIN);
+    lv_obj_set_style_text_color(btcConversionLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_set_style_text_opa(btcConversionLabel, LV_OPA_80, LV_PART_MAIN);
+    lv_obj_align_to(btcConversionLabel,btcPriceLabel, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+    lv_obj_set_style_text_align(btcConversionLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_add_flag(btcConversionLabel, LV_OBJ_FLAG_HIDDEN);
 
     // Create the clock timer
     screenObjs.clockTimer = lv_timer_create([](lv_timer_t* timer) 
@@ -213,7 +243,13 @@ void homeScreen()
 
         }
         }
-        
+        else if (btcPriceContainerShown)
+        {
+            // Get the btc price
+            MempoolApiState* mempoolState = getMempoolState();
+            uint32_t btcPrice = mempoolState->priceUSD;
+            lv_label_set_text_fmt(btcPriceLabel, "$%d,%03d", (int)(btcPrice/1000), (int)(btcPrice) % 1000);
+        }
 
     }, 1000, &clockLabel);
 }
