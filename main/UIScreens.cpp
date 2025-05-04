@@ -1905,6 +1905,12 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     }
 }
 
+static void screenBrightnessSliderEventHandler(lv_event_t* e) {
+    lv_obj_t* slider = lv_event_get_target(e);
+    uint8_t value = lv_slider_get_value(slider);
+    setBrightness(value);
+}
+
 void settingsScreen()
 {
     uiTheme_t* theme = getCurrentTheme();
@@ -2194,7 +2200,8 @@ void settingsScreen()
         lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
         lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
         lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-        lv_slider_set_value(screenBrightnessSlider, 100, LV_ANIM_OFF);
+        lv_slider_set_value(screenBrightnessSlider, 255, LV_ANIM_OFF);
+        lv_slider_set_range(screenBrightnessSlider, 1, 255);
     } else {
         lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
         lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS NOT AVAILABLE");
@@ -2202,8 +2209,10 @@ void settingsScreen()
         lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
         lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
         lv_slider_set_value(screenBrightnessSlider, 0, LV_ANIM_OFF);
+        lv_slider_set_range(screenBrightnessSlider, 0, 0);
     }
 
+    lv_obj_add_event_cb(screenBrightnessSlider, screenBrightnessSliderEventHandler, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Asic Settings Container
     lv_obj_t* asicSettingsContainer = lv_obj_create(asicSettingsTab);

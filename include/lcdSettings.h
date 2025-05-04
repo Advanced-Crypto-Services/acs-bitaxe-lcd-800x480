@@ -7,3 +7,5 @@
 extern bool backlightPWM;
 
 extern void initializeIOExpander(void);
+extern void setBrightness(uint8_t value);
+extern uint8_t getBrightness(void);

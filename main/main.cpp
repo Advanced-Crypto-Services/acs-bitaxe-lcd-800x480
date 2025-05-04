@@ -77,11 +77,7 @@ void listSpiffsContents() {
 }
 
 
-void setBrightness(uint8_t value) {
-    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, value));
-    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
-    ESP_LOGI("Backlight", "Set brightness to %d", value);
-}
+
 
 
 

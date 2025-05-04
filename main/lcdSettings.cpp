@@ -9,6 +9,7 @@
 #define USB_SEL 5
 
 bool backlightPWM = false;
+static uint8_t brightness = 100;
 
 
 void initializeIOExpander(void)
@@ -87,4 +88,18 @@ if (backlightPWM) {
     ESP_ERROR_CHECK(ledc_channel_config(&bkPWMChannelConfig));
     ESP_LOGI("Backlight", "PWM initialized");
 }
+}
+
+
+void setBrightness(uint8_t value)
+{
+    ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, value));
+    ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0));
+    ESP_LOGI("Backlight", "Set brightness to %d", value);
+    brightness = value;
+}
+
+uint8_t getBrightness(void)
+{
+    return brightness;
 }
