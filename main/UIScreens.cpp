@@ -1927,8 +1927,8 @@ void settingsScreen()
 
     lv_obj_t * networkSettingsTab = lv_tabview_add_tab(settingTabView, "WIFI");
     lv_obj_clear_flag(networkSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * miningSettingsTab = lv_tabview_add_tab(settingTabView, "MINING");
-    lv_obj_clear_flag(miningSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t * screenSettingsTab = lv_tabview_add_tab(settingTabView, "SCREEN");
+    lv_obj_clear_flag(screenSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t * asicSettingsTab = lv_tabview_add_tab(settingTabView, "PRESET");
     lv_obj_clear_flag(asicSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t * autoTuneSettingsTab = lv_tabview_add_tab(settingTabView, "TUNE");
@@ -2131,84 +2131,68 @@ void settingsScreen()
     lv_obj_set_style_text_opa(settingsConfirmWifiBtnLabel, LV_OPA_100, LV_PART_MAIN);
     lv_obj_center(settingsConfirmWifiBtnLabel);
 
-    // Mining Settings Container
-    lv_obj_t* miningSettingsContainer = lv_obj_create(miningSettingsTab);
-    lv_obj_set_size(miningSettingsContainer, 672, 312);
-    lv_obj_align(miningSettingsContainer, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_opa(miningSettingsContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(miningSettingsContainer, LV_OPA_0, LV_PART_MAIN);
+    // Screen Settings Container
+    lv_obj_t* screenSettingsContainer = lv_obj_create(screenSettingsTab);
+    lv_obj_set_size(screenSettingsContainer, 672, 312);
+    lv_obj_align(screenSettingsContainer, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_opa(screenSettingsContainer, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(screenSettingsContainer, LV_OPA_0, LV_PART_MAIN);
 
-    // Mining Settings Label
-    lv_obj_t* miningSettingsLabel = lv_label_create(miningSettingsContainer);
-    lv_label_set_text(miningSettingsLabel, "ADVANCED MINING SETTINGS");
-    lv_obj_set_style_text_font(miningSettingsLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(miningSettingsLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(miningSettingsLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(miningSettingsLabel, LV_OBJ_FLAG_SCROLLABLE);
+    // Screen Settings Label
+    lv_obj_t* screenSettingsLabel = lv_label_create(screenSettingsContainer);
+    lv_label_set_text(screenSettingsLabel, "SCREEN SETTINGS");
+    lv_obj_set_style_text_font(screenSettingsLabel, theme->fontMedium24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(screenSettingsLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align(screenSettingsLabel, LV_ALIGN_TOP_LEFT, 0, -16);
+    lv_obj_clear_flag(screenSettingsLabel, LV_OBJ_FLAG_SCROLLABLE);
 
-    //  Stratum URL Main Text Area
-    lv_obj_t* stratumUrlTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum URL Main");
-    lv_obj_align(stratumUrlTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 16);
-    lv_obj_set_width(stratumUrlTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumUrlTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUrlTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUrlTextAreaMain);
+    // Screen Brightness Slider styles
+    static lv_style_t style_main;
+    static lv_style_t style_indicator;
+    static lv_style_t style_knob;
+    static lv_style_t style_pressed_color;
+    //lv_obj_set_style_bg_color(screenBrightnessSlider, theme->backgroundColor, LV_PART_MAIN);
+    //lv_obj_set_style_bg_opa(screenBrightnessSlider, LV_OPA_80, LV_PART_MAIN);
+    //lv_obj_set_style_border_width(screenBrightnessSlider, 0, LV_PART_MAIN);
+    // main style
+    lv_style_init(&style_main);
+    lv_style_set_bg_opa(&style_main, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_main, theme->backgroundColor);
+    lv_style_set_radius(&style_main, LV_RADIUS_CIRCLE);
+    lv_style_set_pad_ver(&style_main, -2); /*Makes the indicator larger*/
 
-    //Stratum Port Main Text Area
-    lv_obj_t* stratumPortTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum Port Main");
-    lv_obj_align(stratumPortTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 80);
-    lv_obj_set_width(stratumPortTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumPortTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPortTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPortTextAreaMain);
+    // indicator style
+    lv_style_init(&style_indicator);
+    lv_style_set_bg_opa(&style_indicator, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_indicator, theme->primaryColor);
+    lv_style_set_radius(&style_indicator, LV_RADIUS_CIRCLE);
 
-    // Stratum User Main  Text Area
-    lv_obj_t* stratumUserTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum User Main");
-    lv_obj_align(stratumUserTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 144);
-    lv_obj_set_width(stratumUserTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumUserTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUserTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUserTextAreaMain);
+    // knob style
+    lv_style_init(&style_knob);
+    lv_style_set_bg_opa(&style_knob, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_knob, theme->primaryColor);
+    lv_style_set_radius(&style_knob, LV_RADIUS_CIRCLE);
+    lv_style_set_border_color(&style_knob, theme->backgroundColor);
+    lv_style_set_border_width(&style_knob, 2);
+    lv_style_set_radius(&style_knob, LV_RADIUS_CIRCLE);
+    lv_style_set_pad_all(&style_knob, 6);
 
-    // Stratum Password Main Text Area
-    lv_obj_t* stratumPasswordTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum Password Main");
-    lv_obj_align(stratumPasswordTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 208);
-    lv_obj_set_width(stratumPasswordTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumPasswordTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPasswordTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPasswordTextAreaMain);
+    // Create slider
+    lv_obj_t* screenBrightnessSlider = lv_slider_create(screenSettingsContainer);
+    lv_obj_remove_style_all(screenBrightnessSlider);
+    lv_obj_set_size(screenBrightnessSlider, 264, 32);
+    lv_obj_align(screenBrightnessSlider, LV_ALIGN_TOP_LEFT, 16, 32);
+    lv_obj_add_style(screenBrightnessSlider, &style_main, LV_PART_MAIN);
+    lv_obj_add_style(screenBrightnessSlider, &style_indicator, LV_PART_INDICATOR);
+    lv_obj_add_style(screenBrightnessSlider, &style_knob, LV_PART_KNOB);
 
-    //  Stratum URL Backup Text Area
-    lv_obj_t* stratumUrlTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum URL Fallback");
-    lv_obj_align(stratumUrlTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 16);
-    lv_obj_set_width(stratumUrlTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumUrlTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUrlTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUrlTextAreaFallback);
+    // screen brightness label
+    lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
+    lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS");
+    lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
 
-    //Stratum Port Fallback Text Area
-    lv_obj_t* stratumPortTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum Port Fallback");
-    lv_obj_align(stratumPortTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 80);
-    lv_obj_set_width(stratumPortTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumPortTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPortTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPortTextAreaFallback);
-
-    // Stratum User Fallback Text Area
-    lv_obj_t* stratumUserTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum User Fallback");
-    lv_obj_align(stratumUserTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 144);
-    lv_obj_set_width(stratumUserTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumUserTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUserTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUserTextAreaFallback);
-
-    // Stratum Password Fallback Text Area
-    lv_obj_t* stratumPasswordTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum Password Fallback");
-    lv_obj_align(stratumPasswordTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 208);
-    lv_obj_set_width(stratumPasswordTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumPasswordTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPasswordTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPasswordTextAreaFallback);
 
     // Asic Settings Container
     lv_obj_t* asicSettingsContainer = lv_obj_create(asicSettingsTab);
@@ -2834,24 +2818,8 @@ screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, a
         lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLL_CHAIN);
         lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_keyboard_set_textarea(kb, stratumUrlTextAreaMain);
+        //lv_keyboard_set_textarea(kb, stratumUrlTextAreaMain);
         lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
-
-
-        // Store text area references as we create them
-        //settingsTextAreas.hostnameTextArea = hostnameTextArea;
-        //settingsTextAreas.wifiTextArea = wifiTextArea;
-        //settingsTextAreas.wifiPasswordTextArea = wifiPasswordTextArea;
-        settingsTextAreas.stratumUrlTextArea = stratumUrlTextAreaMain;
-        settingsTextAreas.stratumPortTextArea = stratumPortTextAreaMain;
-        settingsTextAreas.stratumUserTextArea = stratumUserTextAreaMain;
-        settingsTextAreas.stratumPasswordTextArea = stratumPasswordTextAreaMain;
-        settingsTextAreas.stratumUrlTextAreaFallback = stratumUrlTextAreaFallback;
-        settingsTextAreas.stratumPortTextAreaFallback = stratumPortTextAreaFallback;
-        settingsTextAreas.stratumUserTextAreaFallback = stratumUserTextAreaFallback;
-        settingsTextAreas.stratumPasswordTextAreaFallback = stratumPasswordTextAreaFallback;
-        //settingsTextAreas.asicFrequencyTextArea = asicFrequencyTextArea;
-       // settingsTextAreas.asicVoltageTextArea = asicVoltageTextArea;
 
         // Create save button
         
