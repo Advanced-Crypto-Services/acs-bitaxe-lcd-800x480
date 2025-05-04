@@ -26,6 +26,7 @@ idf_component_register(
     "Clock.cpp"
     "modelPresets.cpp"
     "lcdSettings.cpp"
+    "homeScreen.cpp"
     INCLUDE_DIRS 
     "."
     "../include"

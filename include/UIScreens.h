@@ -58,7 +58,7 @@ struct ScreenObjects
 
 };
 
-// Declare the struct type
+// Declare the struct type This is currently unused
 struct SettingsTextAreas {
     lv_obj_t* hostnameTextArea;
     lv_obj_t* wifiTextArea;
