@@ -140,7 +140,7 @@ void statusBar(lv_obj_t* parent)
 
      tempIcon = lv_img_create(statusBarObj);
     lv_img_set_src(tempIcon, "S:/temp40x40.png");
-    lv_obj_align(tempIcon, LV_ALIGN_TOP_RIGHT, -192, 8);
+    lv_obj_align(tempIcon, LV_ALIGN_TOP_RIGHT, -256, 0);
     lv_obj_set_style_bg_opa(tempIcon, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_img_recolor(tempIcon, theme->primaryColor, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(tempIcon, LV_OPA_COVER, LV_PART_MAIN);
@@ -156,7 +156,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(statusBarTempLabel, LV_OPA_0, LV_PART_MAIN);
     //lv_obj_set_style_border_width(statusBarTempLabel, 1, LV_PART_MAIN);
     //lv_obj_set_style_border_color(statusBarTempLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_align(statusBarTempLabel, LV_ALIGN_TOP_RIGHT, -104, 0);
+    lv_obj_align_to(statusBarTempLabel, tempIcon, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
 
     cpuIcon = lv_img_create(statusBarObj);
@@ -165,7 +165,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(cpuIcon, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(cpuIcon, LV_OPA_COVER, LV_PART_MAIN);  
     //lv_img_set_zoom(cpuIcon, 512);
-    lv_obj_align(cpuIcon, LV_ALIGN_TOP_MID, 8, 0);
+    lv_obj_align(cpuIcon, LV_ALIGN_TOP_MID, -48, 0);
 
     statusBarHashrateLabel = lv_label_create(statusBarObj);
     lv_label_set_text_fmt(statusBarHashrateLabel, "%d GH/s\n%d W/TH", (int)IncomingData.mining.hashrate, (int)IncomingData.mining.efficiency);
@@ -177,7 +177,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(statusBarHashrateLabel, LV_OPA_0, LV_PART_MAIN);
     //lv_obj_set_style_border_width(statusBarHashrateLabel, 1, LV_PART_MAIN);
     //lv_obj_set_style_border_color(statusBarHashrateLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_align(statusBarHashrateLabel, LV_ALIGN_TOP_MID, 80, 0);
+    lv_obj_align_to(statusBarHashrateLabel, cpuIcon, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
     pwrIcon = lv_img_create(statusBarObj);
     lv_img_set_src(pwrIcon, "S:/plugZap40x40.png");
@@ -185,7 +185,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_img_recolor_opa(pwrIcon, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(pwrIcon, LV_OPA_0, LV_PART_MAIN);
     //lv_img_set_zoom(pwrIcon, 512);
-    lv_obj_align(pwrIcon, LV_ALIGN_TOP_MID, -128, 0);
+    lv_obj_align(pwrIcon, LV_ALIGN_TOP_MID, -176, 0);
 
     statusBarPowerLabel = lv_label_create(statusBarObj);
     lv_label_set_text_fmt(statusBarPowerLabel, "%d.%03d V\n%d.%02d W", 
@@ -199,7 +199,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(statusBarPowerLabel, LV_OPA_0, LV_PART_MAIN);
     //lv_obj_set_style_border_width(statusBarPowerLabel, 1, LV_PART_MAIN);
     //lv_obj_set_style_border_color(statusBarPowerLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_align(statusBarPowerLabel, LV_ALIGN_TOP_MID, -64, 0);
+    lv_obj_align_to(statusBarPowerLabel, pwrIcon, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
     btcPrice = lv_img_create(statusBarObj);
     lv_img_set_src(btcPrice, "S:/bitcoin40x40.png");
@@ -220,7 +220,7 @@ void statusBar(lv_obj_t* parent)
     //lv_obj_set_style_border_width(btcPriceLabel, 1, LV_PART_MAIN);
     //lv_obj_set_style_border_color(btcPriceLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
     //lv_obj_set_style_text_opa(btcPriceLabel, 224, LV_PART_MAIN);
-    lv_obj_align(statusBarBtcPriceLabel, LV_ALIGN_TOP_LEFT, 56, 0);
+    lv_obj_align_to(statusBarBtcPriceLabel, btcPrice, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
 
     
 
