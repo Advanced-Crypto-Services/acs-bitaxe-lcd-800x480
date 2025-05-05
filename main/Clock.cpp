@@ -14,6 +14,7 @@ void espTime()
     }
     // Initialize SNTP
     Serial0.println("Initializing SNTP");
+    
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, "pool.ntp.org");
     sntp_set_sync_interval(3600000);  // Sync every hour

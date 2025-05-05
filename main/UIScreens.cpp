@@ -1657,6 +1657,7 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     lv_refr_now(NULL);
     delay(100);
 
+/*
     // Ensure WiFi is properly disconnected and in the correct mode
     WiFi.disconnect(true);  // true = disable WiFi altogether
     delay(20);
@@ -1666,7 +1667,7 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     
     WiFi.mode(WIFI_STA);    // Re-enable WiFi in station mode
     delay(20);
-    
+*/
     // Now safe to scan
     listNetworks();  // Scan for networks
     
@@ -1977,7 +1978,12 @@ void settingsScreen()
     lv_style_set_radius(&style_knob, LV_RADIUS_CIRCLE);
     lv_style_set_pad_all(&style_knob, 6);
 
-    // Create slider
+
+
+    // screen brightness label
+
+    if (backlightPWM) {
+            // Create slider
     lv_obj_t* screenBrightnessSlider = lv_slider_create(screenSettingsContainer);
     lv_obj_remove_style_all(screenBrightnessSlider);
     lv_obj_set_size(screenBrightnessSlider, 264, 32);
@@ -1985,10 +1991,6 @@ void settingsScreen()
     lv_obj_add_style(screenBrightnessSlider, &style_main, LV_PART_MAIN);
     lv_obj_add_style(screenBrightnessSlider, &style_indicator, LV_PART_INDICATOR);
     lv_obj_add_style(screenBrightnessSlider, &style_knob, LV_PART_KNOB);
-
-    // screen brightness label
-
-    if (backlightPWM) {
         lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
         lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS");
         lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
@@ -1996,17 +1998,16 @@ void settingsScreen()
         lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
         lv_slider_set_value(screenBrightnessSlider, 255, LV_ANIM_OFF);
         lv_slider_set_range(screenBrightnessSlider, 1, 255);
-    } else {
+        lv_obj_add_event_cb(screenBrightnessSlider, screenBrightnessSliderEventHandler, LV_EVENT_VALUE_CHANGED, NULL);
+    }else{
         lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
         lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS NOT AVAILABLE");
         lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
         lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
-        lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-        lv_slider_set_value(screenBrightnessSlider, 0, LV_ANIM_OFF);
-        lv_slider_set_range(screenBrightnessSlider, 0, 0);
+        lv_obj_align(screenBrightnessLabel, LV_ALIGN_TOP_LEFT, 16, 32);
     }
 
-    lv_obj_add_event_cb(screenBrightnessSlider, screenBrightnessSliderEventHandler, LV_EVENT_VALUE_CHANGED, NULL);
+
 
     // Asic Settings Container
     lv_obj_t* asicSettingsContainer = lv_obj_create(asicSettingsTab);

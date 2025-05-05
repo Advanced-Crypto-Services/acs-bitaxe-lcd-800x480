@@ -44,9 +44,10 @@
 #include "esp_sntp.h"
 #include "driver/ledc.h"
 #include "lcdSettings.h"
+#include "freertos/semphr.h"
 
 
-
+SemaphoreHandle_t wifiMutex = nullptr;
 
 
 void setBrightness(uint8_t value);
@@ -135,7 +136,7 @@ extern "C" void app_main()
     Serial0.println("Theme initialized");
     Serial0.printf("Theme: %d\n", loadThemeFromNVS());
     delay(20);
-
+    wifiMutex = xSemaphoreCreateMutex();
     WiFi.mode(WIFI_STA);
     // Scan networks
     Serial0.println("Scanning WiFi networks...");
