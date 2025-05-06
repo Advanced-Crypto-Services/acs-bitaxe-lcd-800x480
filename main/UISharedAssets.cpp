@@ -19,8 +19,6 @@ lv_obj_t* cpuIcon = nullptr;
 lv_obj_t* pwrIcon = nullptr;
 lv_obj_t* btcPrice = nullptr;
 lv_obj_t* mainContainerObj = nullptr;
-lv_obj_t* presetIcon = nullptr;
-lv_obj_t* presetLabel = nullptr;
 lv_obj_t* birghtnessIcon = nullptr;
 lv_obj_t* birghtnessLabel = nullptr;
 
@@ -124,7 +122,7 @@ void statusBar(lv_obj_t* parent)
 {
     uiTheme_t* theme = getCurrentTheme();
     statusBarObj = lv_img_create(parent);
-    lv_obj_set_size(statusBarObj, 720, 64);
+    lv_obj_set_size(statusBarObj, 688, 64);
     lv_obj_align(statusBarObj, LV_ALIGN_TOP_RIGHT, 0, 8);
     lv_obj_set_style_bg_opa(statusBarObj, LV_OPA_0, LV_PART_MAIN);
     //lv_obj_set_style_border_width(statusBar, 4, LV_PART_MAIN);
@@ -144,7 +142,7 @@ void statusBar(lv_obj_t* parent)
 
      tempIcon = lv_img_create(statusBarObj);
     lv_img_set_src(tempIcon, "S:/temp40x40.png");
-    lv_obj_align(tempIcon, LV_ALIGN_TOP_LEFT, 392, 0);
+    lv_obj_align(tempIcon, LV_ALIGN_TOP_LEFT, 408, 0);
     lv_obj_set_style_bg_opa(tempIcon, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_img_recolor(tempIcon, theme->primaryColor, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(tempIcon, LV_OPA_COVER, LV_PART_MAIN);
@@ -169,7 +167,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_bg_opa(cpuIcon, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(cpuIcon, LV_OPA_COVER, LV_PART_MAIN);  
     //lv_img_set_zoom(cpuIcon, 512);
-    lv_obj_align(cpuIcon, LV_ALIGN_TOP_LEFT, 256, 0);
+    lv_obj_align(cpuIcon, LV_ALIGN_TOP_LEFT, 264, 0);
 
     statusBarHashrateLabel = lv_label_create(statusBarObj);
     lv_label_set_text_fmt(statusBarHashrateLabel, "%d GH/s\n%d W/TH", (int)IncomingData.mining.hashrate, (int)IncomingData.mining.efficiency);
@@ -189,7 +187,7 @@ void statusBar(lv_obj_t* parent)
     lv_obj_set_style_img_recolor_opa(pwrIcon, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(pwrIcon, LV_OPA_0, LV_PART_MAIN);
     //lv_img_set_zoom(pwrIcon, 512);
-    lv_obj_align(pwrIcon, LV_ALIGN_TOP_LEFT, 128, 0);
+    lv_obj_align(pwrIcon, LV_ALIGN_TOP_LEFT, 136, 0);
 
     statusBarPowerLabel = lv_label_create(statusBarObj);
     lv_label_set_text_fmt(statusBarPowerLabel, "%d.%03d V\n%d.%02d W", 
@@ -224,31 +222,14 @@ void statusBar(lv_obj_t* parent)
     //lv_obj_set_style_border_width(btcPriceLabel, 1, LV_PART_MAIN);
     //lv_obj_set_style_border_color(btcPriceLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
     //lv_obj_set_style_text_opa(btcPriceLabel, 224, LV_PART_MAIN);
-    lv_obj_align_to(statusBarBtcPriceLabel, btcPrice, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
-
-    presetIcon = lv_img_create(statusBarObj);
-    lv_img_set_src(presetIcon, "S:/preset40x40.png");
-    lv_obj_set_style_bg_opa(presetIcon, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_img_recolor(presetIcon, theme->primaryColor, LV_PART_MAIN);
-    lv_obj_set_style_img_recolor_opa(presetIcon, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_align(presetIcon, LV_ALIGN_TOP_LEFT, 456, 0);
-
-    presetLabel = lv_label_create(statusBarObj);
-    lv_label_set_text(presetLabel, "PRES");
-    lv_obj_set_style_text_font(presetLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_align(presetLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(presetLabel, 80);
-    lv_label_set_long_mode(presetLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(presetLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(presetLabel, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_align_to(presetLabel, presetIcon, LV_ALIGN_OUT_RIGHT_TOP, 4, 0);
+    lv_obj_align_to(statusBarBtcPriceLabel, btcPrice, LV_ALIGN_OUT_RIGHT_TOP, 0, 0);
 
     birghtnessIcon = lv_img_create(statusBarObj);
     lv_img_set_src(birghtnessIcon, "S:/brightness40x40.png");
     lv_obj_set_style_bg_opa(birghtnessIcon, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_img_recolor(birghtnessIcon, theme->primaryColor, LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(birghtnessIcon, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_align(birghtnessIcon, LV_ALIGN_TOP_LEFT, 560, 0);
+    lv_obj_align(birghtnessIcon, LV_ALIGN_TOP_LEFT, 488, 0);
     
     birghtnessLabel = lv_label_create(statusBarObj);
     lv_label_set_text(birghtnessLabel, "100%");
