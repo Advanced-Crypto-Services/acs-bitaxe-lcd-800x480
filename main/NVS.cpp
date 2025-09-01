@@ -3,6 +3,7 @@
 #include <nvs_flash.h>
 #include <nvs.h>
 #include "UIThemes.h"
+#include <SPIFFS.h>
 
 void initializeNVS(void);
 themePreset_t loadThemeFromNVS(void);
@@ -23,24 +24,13 @@ themePreset_t loadThemeFromNVS(void) {
     nvs_handle_t nvsHandle;
     esp_err_t err = nvs_open(NVS_NAMESPACE_THEMES, NVS_READONLY, &nvsHandle);
 
-    #if (BTCMagazine == 1)
-    uint8_t themeValue = 7; // Make default theme the BTCMagazine Theme
-    #elif (BlockStreamJade == 1)
-    uint8_t themeValue = 2; // Make default theme the Jade Theme
-    #elif (SoloSatoshi == 1)    
-    uint8_t themeValue = 4; // Make default theme the SoloSatoshi Theme
-    #elif (ALTAIR == 1)
-    uint8_t themeValue = 5; // Make default theme the ALTAIR Theme
-    #elif (SoloMiningCo == 1)
-    uint8_t themeValue = 6; // Make default theme the SoloMiningCo Theme
-    #elif (VoskCoin == 1)
-    uint8_t themeValue = 8; // Make default theme the VoskCoin Theme
-    #else
-    uint8_t themeValue = 0; // Make default theme the ACS Theme
-    #endif
-
-
-
+    // Initialize theme based on available themes
+    uint8_t themeValue = 0; // Default to ACS theme
+    
+    // Check for available themes in order of preference
+    if (SPIFFS.exists("/UILogoJADE.png")) {
+        themeValue = 2; // Blockstream Jade theme
+    } 
 
     if (err == ESP_OK) {
         err = nvs_get_u8(nvsHandle, NVS_KEY_THEME, &themeValue);

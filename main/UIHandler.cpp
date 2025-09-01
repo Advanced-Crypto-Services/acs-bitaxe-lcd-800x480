@@ -3,23 +3,26 @@
 #include <lvgl.h>
 #include <Arduino.h>
 #include "UIScreens.h"
+#include "miningStatsScreen.h"
 
 extern bool settingsChanged;
 
 ScreenObjects screenObjs = {
     .background = nullptr,
+    .statusBar = nullptr,
+    .tabIcons = nullptr,
     .homeMainContainer = nullptr,
     .miningMainContainer = nullptr,
     .activityMainContainer = nullptr,
-    .bitcoinNewsMainContainer = nullptr,
+    .btcStatsMainContainer = nullptr,
     .settingsMainContainer = nullptr,
-    .labelUpdateTimer = nullptr,
-    .chartUpdateTimer = nullptr,
+    .deviceStatsLabelsUpdateTimer = nullptr,
+    .miningStatsLabelsUpdateTimer = nullptr,
     .statusBarUpdateTimer = nullptr,
     .clockTimer = nullptr,
-    .apiUpdateTimer = nullptr,
     .autoTuneSettingsTimer = nullptr,
-    
+    .btcStatsLabelsUpdateTimer = nullptr,
+    .settingTabView = nullptr
 };
 
 
@@ -39,14 +42,16 @@ void switchToScreen(ScreenType newScreen)
     lv_obj_add_flag(screenObjs.homeMainContainer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(screenObjs.miningMainContainer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(screenObjs.activityMainContainer, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(screenObjs.bitcoinNewsMainContainer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(screenObjs.btcStatsMainContainer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(screenObjs.settingsMainContainer, LV_OBJ_FLAG_HIDDEN);
     Serial.println("Settings Container Hidden");
     // Pause all active timers
-    if (screenObjs.labelUpdateTimer) lv_timer_pause(screenObjs.labelUpdateTimer);
-    if (screenObjs.chartUpdateTimer) lv_timer_pause(screenObjs.chartUpdateTimer);
+    if (screenObjs.deviceStatsLabelsUpdateTimer) lv_timer_pause(screenObjs.deviceStatsLabelsUpdateTimer);
+    if (miningGraphState.timers[0]) lv_timer_pause(miningGraphState.timers[0]);
+    if (miningGraphState.timers[1]) lv_timer_pause(miningGraphState.timers[1]);
+    if (miningGraphState.timers[2]) lv_timer_pause(miningGraphState.timers[2]);
     if (screenObjs.clockTimer) lv_timer_pause(screenObjs.clockTimer);
-    if (screenObjs.apiUpdateTimer) lv_timer_pause(screenObjs.apiUpdateTimer);
+    if (screenObjs.btcStatsLabelsUpdateTimer) lv_timer_pause(screenObjs.btcStatsLabelsUpdateTimer);
     
     Serial.println("All Timers Paused");
 
@@ -89,19 +94,21 @@ void switchToScreen(ScreenType newScreen)
         case activeScreenMining:
             lv_obj_add_flag(tabBitcoinNews, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(screenObjs.miningMainContainer, LV_OBJ_FLAG_HIDDEN);
-            lv_timer_resume(screenObjs.chartUpdateTimer);
+            if (miningGraphState.timers[miningGraphState.currentIndex]) {
+                lv_timer_resume(miningGraphState.timers[miningGraphState.currentIndex]);
+            }
             Serial.println("Mining Screen Shown");
             break;
         case activeScreenActivity:
             lv_obj_add_flag(tabBitcoinNews, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(screenObjs.activityMainContainer, LV_OBJ_FLAG_HIDDEN);
-            lv_timer_resume(screenObjs.labelUpdateTimer);
+            lv_timer_resume(screenObjs.deviceStatsLabelsUpdateTimer);
             Serial.println("Activity Screen Shown");
             break;
         case activeScreenBitcoinNews:
             lv_obj_add_flag(tabBitcoinNews, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(screenObjs.bitcoinNewsMainContainer, LV_OBJ_FLAG_HIDDEN);
-            lv_timer_resume(screenObjs.apiUpdateTimer);
+            lv_obj_clear_flag(screenObjs.btcStatsMainContainer, LV_OBJ_FLAG_HIDDEN);
+            lv_timer_resume(screenObjs.btcStatsLabelsUpdateTimer);
             Serial.println("Bitcoin News Screen Shown");
             break;
         case activeScreenSettings:

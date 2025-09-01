@@ -1,7 +1,6 @@
 #pragma once
 
 #include <Arduino.h>
-#include "I2CData.h"
 #include <esp_attr.h>
 #include "UIScreens.h"
 #include <lvgl.h>
@@ -9,7 +8,7 @@
 
 #include "modelConfig.h"
 
-#if BAPPORT == 1
+
 
 #define PSRAM_ATTR __attribute__((section(".psram")))
 
@@ -19,6 +18,8 @@
 
 // Special Registers
 // Special registers (0xF0 - 0xFF)
+#define LVGL_REG_SPECIAL_THEME 0xF0
+#define LVGL_REG_SPECIAL_PRESET 0xF1
 #define LVGL_REG_SPECIAL_RESTART 0xFE
 // Flags (0xE0 - 0xEF)
 #define LVGL_FLAG_STARTUP_DONE 0xE0
@@ -37,7 +38,8 @@ extern SpecialRegisters specialRegisters;
 
 #define BAPReadBufferLength 512
 extern uint8_t* BAPReadBuffer;
-
+#define BAPWriteBufferLength 512
+extern uint8_t* BAPWriteBuffer;
 // Define the registers for the BAP
 
 #define LVGL_REG_SSID           0x21
@@ -62,7 +64,7 @@ extern uint8_t* BAPReadBuffer;
 #define LVGL_REG_POWER_STATS    0x43 // 4 * float
 #define LVGL_REG_ASIC_INFO      0x44 // uint16
 #define LVGL_REG_UPTIME         0x45 // uint32 Look into moving to 64 bit to increase time 
-#define LVGL_REG_TARGET_VOLTAGE 0x46 // (uint16_t )
+#define LVGL_REG_VREG_TEMP      0x46 // float
 
 // Device status registers (on change only)
 #define LVGL_REG_FLAGS          0x50 // 4 bytes
@@ -86,6 +88,18 @@ extern uint8_t* BAPReadBuffer;
 #define LVGL_REG_API_ECONOMY_FEE 0x6B // uint32
 #define LVGL_REG_API_MINIMUM_FEE 0x6C // uint32
 
+// device info registers
+// define max lengths for serial number, model, and firmware version
+#define MAX_SERIAL_LENGTH 32
+#define MAX_MODEL_LENGTH 32
+#define MAX_FIRMWARE_VERSION_LENGTH 32
+#define MAX_THEME_LENGTH 128
+#define LVGL_REG_DEVICE_SERIAL 0x70 // MAX_SERIAL_LENGTH bytes
+#define LVGL_REG_BOARD_MODEL 0x71 // MAX_MODEL_LENGTH bytes
+#define LVGL_REG_BOARD_FIRMWARE_VERSION 0x72 // MAX_FIRMWARE_VERSION_LENGTH bytes
+#define LVGL_REG_THEME_CURRENT 0x73 // 128 bytes
+#define LVGL_REG_THEMES_AVAILABLE 0x74 // 128 bytes
+
 // Settings registers
 #define LVGL_REG_SETTINGS_HOSTNAME 0xA0 // 32 bytes
 #define LVGL_REG_SETTINGS_WIFI_SSID 0xA1 // 32 bytes
@@ -98,6 +112,8 @@ extern uint8_t* BAPReadBuffer;
 #define MAX_STATUS_LENGTH    32
 #define MAX_INFO_LENGTH      64
 #define MAX_DIFF_LENGTH      16
+#define MAX_THEME_LENGTH     32
+#define MAX_PRESET_LENGTH    32
 
 // Maximum lengths for numeric data
 #define MAX_FLOAT_SIZE      sizeof(float)
@@ -213,6 +229,7 @@ struct MonitoringData
     uint32_t asicInfo;
     uint32_t uptime;
     uint16_t targetDomainVoltage;
+    float vregTemp;
 };
 
 // Device status structure
@@ -222,6 +239,11 @@ struct DeviceStatus
     char deviceInfo[MAX_INFO_LENGTH];
     char boardInfo[MAX_INFO_LENGTH];
     uint32_t clockSync;
+    char theme[MAX_THEME_LENGTH];
+    char preset[MAX_PRESET_LENGTH];
+    char serialNumber[MAX_SERIAL_LENGTH];
+    char chipModel[MAX_MODEL_LENGTH];
+    char firmwareVersion[MAX_FIRMWARE_VERSION_LENGTH];
 };
 
 // API Data Structure
@@ -272,4 +294,3 @@ extern void handleFlagsDataSerial(uint8_t* buffer, uint8_t len);
 extern void handleSpecialRegistersSerial(uint8_t* buffer, uint8_t len);
 extern void sendRestartToBAP();
 
-#endif

@@ -4,28 +4,12 @@
 #include "modelConfig.h"
 // Theme presets
 typedef enum {
-    THEME_DEFAULT = 0, 
+    THEME_ACS_DEFAULT = 0, 
     THEME_BITAXE_RED = 1,
-    
-    #if (BlockStreamJade == 1)
     THEME_BLOCKSTREAM_JADE = 2,
     THEME_BLOCKSTREAM_BLUE = 3,
-    #endif
-    #if (SoloSatoshi == 1)
     THEME_SOLO_SATOSHI = 4,
-    #endif
-    #if (ALTAIR == 1)
-    THEME_ALTAIR = 5
-    #endif
-    #if (SoloMiningCo == 1)
-    THEME_SOLO_MINING_CO = 6
-    #endif
-    #if (BTCMagazine == 1)
-    THEME_BTCMAGAZINE = 7,
-    #endif
-    #if (VoskCoin == 1)
-    THEME_VOSKCOIN = 8,
-    #endif
+    THEME_SOLO_MINING_CO = 5,
 } themePreset_t;
 
 
@@ -49,6 +33,7 @@ typedef struct {
     const char* logo2;
     const char* themePreview;
     themePreset_t themePreset;
+    const char* themeName;
 
 } uiTheme_t;
 
@@ -58,6 +43,7 @@ typedef struct {
 void initializeTheme(themePreset_t preset);
 void setCustomTheme(uiTheme_t newTheme);
 themePreset_t getCurrentThemePreset(void);
+bool isThemeAvailable(themePreset_t theme);
 uiTheme_t* getCurrentTheme(void);
 void applyThemeToObject(lv_obj_t* obj, bool includeBorder);
 

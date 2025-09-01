@@ -40,12 +40,17 @@ ESP_IOExpander::ESP_IOExpander(i2c_port_t id, uint8_t address):
 {
 }
 
-void ESP_IOExpander::init(void)
+esp_err_t ESP_IOExpander::init(void)
 {
+    esp_err_t err = ESP_OK;
     if (i2c_need_init) {
-        CHECK_ERROR_RETURN(i2c_param_config(i2c_id, &i2c_config));
-        CHECK_ERROR_RETURN(i2c_driver_install(i2c_id, i2c_config.mode, 0, 0, 0));
+        err = i2c_param_config(i2c_id, &i2c_config);
+        if (err != ESP_OK) {
+            return err;
+        }
+        err = i2c_driver_install(i2c_id, i2c_config.mode, 0, 0, 0);
     }
+    return err;
 }
 
 void ESP_IOExpander::reset(void)

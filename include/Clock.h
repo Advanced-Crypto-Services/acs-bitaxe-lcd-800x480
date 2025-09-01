@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include "Time.h"
 //#include "DateStrings.h"
-#include "I2CData.h"
 #include "BAP.h"
 #include "wifiFeatures.h"
 #include "httpServer.h"

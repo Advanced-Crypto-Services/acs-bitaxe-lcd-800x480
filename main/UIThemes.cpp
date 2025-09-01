@@ -1,6 +1,8 @@
 #include "UIThemes.h"
 #include "fonts.h"
 #include "modelConfig.h"
+#include <SPIFFS.h>
+#include "BAP.h"
 
 uiTheme_t currentTheme;
 
@@ -23,7 +25,8 @@ static const uiTheme_t defaultTheme = {
     .logo1 = "S:/Logos.png",
     .logo2 = "S:/openSourceBitcoinMining.png",
     .themePreview = "S:/acsGreenUIPreview.png",
-    .themePreset = THEME_DEFAULT
+    .themePreset = THEME_ACS_DEFAULT,
+    .themeName = "THEME_ACS_DEFAULT"
 };
 
 uiTheme_t* getCurrentTheme(void) {
@@ -34,203 +37,172 @@ themePreset_t getCurrentThemePreset(void) {
     return currentTheme.themePreset;
 }
 
+bool isThemeAvailable(themePreset_t theme) {
+    switch (theme) {
+        case THEME_ACS_DEFAULT:
+            return true; // Default theme is always available
+        case THEME_BITAXE_RED:
+            return true;
+        case THEME_BLOCKSTREAM_JADE:
+            return SPIFFS.exists("/UILogoJADE.png");
+        case THEME_BLOCKSTREAM_BLUE:
+            return SPIFFS.exists("/bsBlueLogo.png");
+        case THEME_SOLO_SATOSHI:
+            return SPIFFS.exists("/SoloSatoshiSmallLogo.png");
+        case THEME_SOLO_MINING_CO:
+            return SPIFFS.exists("/soloMiningCo.png");
+        default:
+            return false;
+    }
+}
 
 void initializeTheme(themePreset_t preset) {
     switch (preset) {
         
         case THEME_BITAXE_RED:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0xF80421),
-                .secondaryColor = lv_color_hex(0xfc4d62),
-                .backgroundColor = lv_color_hex(0x070D17),
-                .textColor = lv_color_hex(0xF80421),
-                .borderColor = lv_color_hex(0xfc4d62),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/openSourceBitcoinMining.png",
-                .themePreview = "S:/bitaxeRedUIPreview.png",
-                .themePreset = THEME_BITAXE_RED
-            };
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0xF80421),
+                    .secondaryColor = lv_color_hex(0xfc4d62),
+                    .backgroundColor = lv_color_hex(0x070D17),
+                    .textColor = lv_color_hex(0xF80421),
+                    .borderColor = lv_color_hex(0xfc4d62),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundBITAXERED.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/openSourceBitcoinMining.png",
+                    .themePreview = "S:/bitaxeRedUIPreview.png",
+                    .themePreset = THEME_BITAXE_RED,
+                    .themeName = "THEME_BITAXE_RED"
+                };
             break;
-        #if (BlockStreamJade == 1)
+            
         case THEME_BLOCKSTREAM_JADE:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0x00B093),
-                .secondaryColor = lv_color_hex(0x006D62),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0x21CCAB),
-                .borderColor = lv_color_hex(0x01544A),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundJADEGREEN.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/UILogoJADE.png",
-                .themePreview = "S:/jadeUIPreview.png",
-                .themePreset = THEME_BLOCKSTREAM_JADE
-            };
+            if (SPIFFS.exists("/UILogoJADE.png")) {
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0x00B093),
+                    .secondaryColor = lv_color_hex(0x006D62),
+                    .backgroundColor = lv_color_hex(0x111316),
+                    .textColor = lv_color_hex(0x21CCAB),
+                    .borderColor = lv_color_hex(0x01544A),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundJADEGREEN.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/UILogoJADE.png",
+                    .themePreview = "S:/jadeUIPreview.png",
+                    .themePreset = THEME_BLOCKSTREAM_JADE,
+                    .themeName = "THEME_BLOCKSTREAM_JADE"
+                };
+            } else {
+                currentTheme = defaultTheme;
+            }
             break;
-       
 
         case THEME_BLOCKSTREAM_BLUE:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0x00C3FF),
-                .secondaryColor = lv_color_hex(0x00C3FF),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0x00C3FF),
-                .borderColor = lv_color_hex(0x00C3FF),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBLKSTRMBLUE.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/bsBlueLogo.png",
-                .themePreview = "S:/bsBlueUIPreview.png",
-                .themePreset = THEME_BLOCKSTREAM_BLUE
-            };
+            if (SPIFFS.exists("/bsBlueLogo.png")) {
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0x00C3FF),
+                    .secondaryColor = lv_color_hex(0x00C3FF),
+                    .backgroundColor = lv_color_hex(0x111316),
+                    .textColor = lv_color_hex(0x00C3FF),
+                    .borderColor = lv_color_hex(0x00C3FF),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundBLKSTRMBLUE.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/bsBlueLogo.png",
+                    .themePreview = "S:/bsBlueUIPreview.png",
+                    .themePreset = THEME_BLOCKSTREAM_BLUE,
+                    .themeName = "THEME_BLOCKSTREAM_BLUE"
+                };
+            } else {
+                currentTheme = defaultTheme;
+            }
             break;
-        #endif
-        #if (SoloSatoshi == 1)
+            
         case THEME_SOLO_SATOSHI:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0xF80421),
-                .secondaryColor = lv_color_hex(0xf7931a),
-                .backgroundColor = lv_color_hex(0x070D17),
-                .textColor = lv_color_hex(0xFFFFFF),
-                .borderColor = lv_color_hex(0xf7931a),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/SoloSatoshiSmallLogo.png",
-                .themePreview = "S:/SoloSatoshiSmallLogo.png",
-                .themePreset = THEME_SOLO_SATOSHI
-            };
+            if (SPIFFS.exists("/SoloSatoshiSmallLogo.png")) {
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0xF80421),
+                    .secondaryColor = lv_color_hex(0xf7931a),
+                    .backgroundColor = lv_color_hex(0x070D17),
+                    .textColor = lv_color_hex(0xFFFFFF),
+                    .borderColor = lv_color_hex(0xf7931a),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundBITAXERED.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/SoloSatoshiSmallLogo.png",
+                    .themePreview = "S:/SoloSatoshiSmallLogo.png",
+                    .themePreset = THEME_SOLO_SATOSHI,
+                    .themeName = "THEME_SOLO_SATOSHI"
+                };
+            } else {
+                currentTheme = defaultTheme;
+            }
             break;
-        #endif
-        #if (ALTAIR == 1)
-        case THEME_ALTAIR:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0xc28e0e),
-                .secondaryColor = lv_color_hex(0xfcb900),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0xfcb900),
-                .borderColor = lv_color_hex(0xc28e0e),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/altairLogo.png",
-                .themePreview = "S:/altairLogo.png",
-                .themePreset = THEME_ALTAIR
-            };
-            break;
-        #endif
-        #if (SoloMiningCo == 1)
+ 
+            
         case THEME_SOLO_MINING_CO:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0xf15900),
-                .secondaryColor = lv_color_hex(0xc5900F1),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0xffffffff),
-                .borderColor = lv_color_hex(0xc5900F1),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/soloMiningCo.png",
-                .themePreview = "S:/soloMiningCo.png",
-                .themePreset = THEME_SOLO_MINING_CO
-            };
+            if (SPIFFS.exists("/soloMiningCo.png")) {
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0xf15900),
+                    .secondaryColor = lv_color_hex(0xc5900F1),
+                    .backgroundColor = lv_color_hex(0x111316),
+                    .textColor = lv_color_hex(0xffffffff),
+                    .borderColor = lv_color_hex(0xc5900F1),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundBITAXERED.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/soloMiningCo.png",
+                    .themePreview = "S:/soloMiningCo.png",
+                    .themePreset = THEME_SOLO_MINING_CO,
+                    .themeName = "THEME_SOLO_MINING_CO"
+                };
+            } else {
+                currentTheme = defaultTheme;
+            }
             break;
-        #endif
-        #if (BTCMagazine == 1)
-        case THEME_BTCMAGAZINE:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0xff9500),
-                .secondaryColor = lv_color_hex(0xff9500),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0xffffff),
-                .borderColor = lv_color_hex(0xff9500),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/btcMagazineLogo.png",
-                .themePreview = "S:/btcMagazineLogo.png",
-                .themePreset = THEME_BTCMAGAZINE
-            };
-            break;
-        #endif
-        #if (VoskCoin == 1)
-        case THEME_VOSKCOIN:
-            currentTheme = (uiTheme_t){
-                .primaryColor = lv_color_hex(0x23B852),
-                .secondaryColor = lv_color_hex(0x23B852),
-                .backgroundColor = lv_color_hex(0x111316),
-                .textColor = lv_color_hex(0xffffff),
-                .borderColor = lv_color_hex(0x23B852),
-                .defaultOpacity = 80,
-                .backgroundOpacity = 40,
-                .fontExtraBold144 = &interExtraBold144,
-                .fontExtraBold72 = &interExtraBold72,
-                .fontExtraBold56 = &interExtraBold56,
-                .fontExtraBold32 = &interExtraBold32,
-                .fontMedium24 = &interMedium24,
-                .fontMedium16 = &interMedium16_19px,
-                .background = "S:/UIBackgroundBITAXERED.png",
-                .logo1 = "S:/Logos.png",
-                .logo2 = "S:/voskLogo.png",
-                .themePreview = "S:/voskLogo.png",
-                .themePreset = THEME_VOSKCOIN
-            };
-            break;
-        #endif
-                
-
+        
         default:
             currentTheme = defaultTheme;
             break;
     }
+    
+    // Write theme information to BAP
+    char themeInfo[MAX_THEME_LENGTH];
+    snprintf(themeInfo, sizeof(themeInfo), "THEME:%s", currentTheme.themeName);
+    writeDataToBAP((uint8_t*)currentTheme.themeName, strlen(currentTheme.themeName), LVGL_REG_THEME_CURRENT);
 }

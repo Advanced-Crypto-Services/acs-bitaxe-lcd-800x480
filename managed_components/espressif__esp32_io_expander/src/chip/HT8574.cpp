@@ -53,9 +53,10 @@ ESP_IOExpander_HT8574::~ESP_IOExpander_HT8574()
     }
 }
 
-void ESP_IOExpander_HT8574::begin(void)
+esp_err_t ESP_IOExpander_HT8574::begin(void)
 {
-    CHECK_ERROR_RETURN(esp_io_expander_new_i2c_ht8574(i2c_id, i2c_address, &handle));
+    esp_err_t ret = esp_io_expander_new_i2c_ht8574(i2c_id, i2c_address, &handle);
+    return ret;
 }
 
 static esp_err_t read_input_reg(esp_io_expander_handle_t handle, uint32_t *value);

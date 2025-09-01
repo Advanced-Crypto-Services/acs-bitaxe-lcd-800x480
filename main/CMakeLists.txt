@@ -1,10 +1,9 @@
-
 idf_component_register(
     SRCS 
     "main.cpp" 
     "lvgl_port_v8.cpp"
     "BAP.cpp"
-    "I2CData.cpp"
+   
     "initialSetupScreen.cpp"
     "interExtraBold32.c"
     "interExtraBold56.c"
@@ -25,6 +24,12 @@ idf_component_register(
     "httpServer.cpp"
     "Clock.cpp"
     "modelPresets.cpp"
+    "lcdSettings.cpp"
+    "homeScreen.cpp"
+    "activityScreen.cpp"
+    "btcStats.cpp"
+    "miningStatsScreen.cpp"
+    "tutorialScreen.cpp"
     INCLUDE_DIRS 
     "."
     "../include"

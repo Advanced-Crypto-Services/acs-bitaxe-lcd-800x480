@@ -23,6 +23,10 @@ typedef struct {
     uint32_t priceTimestamp;
     uint32_t priceUSD;
     bool priceValid;
+    uint32_t priceEUR;
+    bool priceEURValid;
+    uint32_t priceCAD;
+    bool priceCADValid;
     double networkHashrate;
     bool networkHashrateValid;
     double networkDifficulty;

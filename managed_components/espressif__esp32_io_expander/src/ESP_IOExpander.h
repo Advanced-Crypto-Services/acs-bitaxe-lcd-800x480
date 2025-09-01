@@ -88,7 +88,7 @@ public:
      * @note  This function will initialize I2C bus if it is not initialized.
      *
      */
-    void init(void);
+    esp_err_t init(void);
 
     /**
      * @brief Reset IO expander
@@ -179,7 +179,7 @@ public:
      * @brief Begin IO expander
      *
      */
-    virtual void begin(void) = 0;
+    virtual esp_err_t  begin(void) = 0;
 
 
 protected:

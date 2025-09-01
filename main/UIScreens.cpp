@@ -5,7 +5,6 @@
 #include <SPIFFS.h>
 #include "UIHandler.h"
 #include "UISharedAssets.h"
-#include "I2CData.h"
 #include "fonts.h"
 #include <TimeLib.h>
 #include "BAP.h"
@@ -16,13 +15,19 @@
 #include "wifiFeatures.h"
 #include "Clock.h"
 #include "modelPresets.h"
-
-
+#include "lcdSettings.h"
+#include "homeScreen.h"
+#include "btcStats.h"
+#include "miningStatsScreen.h"
 #define MASK_WIDTH 300
 #define MASK_HEIGHT 64
 
+
 // Define __min macro for use in this file
 #define __min(a,b) ((a)<(b)?(a):(b))
+
+// Define global variables
+char LCDotaAddressLabelText[100];
 
 // Tab objects
 lv_obj_t* tabHome = nullptr;
@@ -39,21 +44,19 @@ ScreenType activeScreen = activeScreenSplash;
 lv_obj_t* splashScreenContainer = nullptr;
 
 // Timers
-lv_timer_t* chartUpdateTimer = nullptr;
 lv_timer_t* networkUpdateTimer = nullptr;
-lv_timer_t* clockUpdateTimer = nullptr;
+
 
 // Labels
 lv_obj_t* miningGraphFooterPoolLabel = nullptr;
 lv_obj_t* miningGraphFooterDiffLabel = nullptr;
 lv_obj_t* miningGraphHashrateLabel = nullptr;
 lv_obj_t* miningGraphFooterRejectRatePercentLabel = nullptr;
-lv_obj_t* clockLabel = nullptr;
-lv_obj_t* dateLabel = nullptr;
 
-static lv_obj_t* lowPowerMode;
-static lv_obj_t* normalPowerMode;
-static lv_obj_t* highPowerMode;
+
+lv_obj_t* quietMode;
+lv_obj_t* balancedMode;
+lv_obj_t* turboMode;
 static lv_obj_t* settingsWifiDiscoveredNetworksContainer;
 static lv_obj_t* settingsWifiDiscoveredNetworksLabel;
 static lv_obj_t* settingsWifiList;
@@ -63,7 +66,8 @@ static lv_obj_t* settingsConfirmWifiBtn;
 static lv_obj_t* settingsBacktoWifiSelectionButton;
 static lv_obj_t* settingsConfirmWifiBtnLabel;   
 static lv_obj_t* settingsConnectingLabel;
-static lv_obj_t* networkSettingsContainer;
+ lv_obj_t* networkSettingsContainer;
+ lv_obj_t* networkSettingsContainerConnectedState;
 static lv_obj_t* timeZoneList;
 static lv_obj_t* customOffsetMinutesTextArea;
 static lv_obj_t* customOffsetHoursTextArea;
@@ -78,15 +82,16 @@ static lv_obj_t* offsetVoltageVariableLabel;
 static lv_obj_t* offsetFrequencyVariableLabel;
 static lv_obj_t* offsetFanSpeedVariableLabel;
 static lv_obj_t* autotuneSwitchLabel;
+lv_obj_t* webUIqrCode;
+lv_obj_t* currentIPContainer;
+lv_obj_t* webUIVersionContainer;
+lv_obj_t* ssidContainer;
+lv_obj_t* connectQrCodeContainer;
+lv_obj_t* LCDotaAddressLabel;
+lv_obj_t* LCDotaQRCode;
 
 
 
-
-static lv_obj_t* blockClockLabel;
-static lv_obj_t* halvingLabel;
-
-static bool clockContainerShown = true;
-static bool blockClockContainerShown = false;
 // Hashrate variables
 float minHashrateSeen = 250;  // Initialize to maximum possible float
 
@@ -140,6 +145,78 @@ lv_obj_t* timeZoneDropdown = nullptr;
 static void themeDropdownEventHandler(lv_event_t* e);
 
 static void factoryResetButtonEventHandler(lv_event_t* e);
+
+// 4 container framework
+void quadContainer(lv_obj_t* parentMainContainer, lv_obj_t*& container1, lv_obj_t*& container2, lv_obj_t*& container3, lv_obj_t*& container4)
+{
+    uiTheme_t* theme = getCurrentTheme();
+    
+    // Create containers with parent
+    container1 = lv_obj_create(parentMainContainer);
+    container2 = lv_obj_create(parentMainContainer);
+    container3 = lv_obj_create(parentMainContainer);
+    container4 = lv_obj_create(parentMainContainer);
+
+    lv_obj_set_size(container1, 295, 165);
+    lv_obj_set_size(container2, 295, 165);
+    lv_obj_set_size(container3, 295, 165);
+    lv_obj_set_size(container4, 295, 165);
+
+    lv_obj_align(container1, LV_ALIGN_TOP_LEFT, -20, -20);
+    lv_obj_align(container2, LV_ALIGN_TOP_RIGHT, 20, -20);
+    lv_obj_align(container3, LV_ALIGN_BOTTOM_LEFT, -20, 20);
+    lv_obj_align(container4, LV_ALIGN_BOTTOM_RIGHT, 20, 20);
+
+    lv_obj_set_style_bg_opa(container1, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container1, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(container1, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(container1, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_style_bg_opa(container2, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container2, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(container2, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(container2, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_style_bg_opa(container3, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container3, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(container3, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(container3, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_set_style_bg_opa(container4, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container4, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(container4, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(container4, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+void quadContainerContent(lv_obj_t* container1, const char* Title, const char* Value)
+{
+    uiTheme_t* theme = getCurrentTheme();
+    lv_obj_t* titleLabel = lv_label_create(container1);
+    lv_label_set_text(titleLabel, Title);
+    lv_obj_set_style_text_font(titleLabel, theme->fontMedium24, LV_PART_MAIN);
+    lv_obj_set_style_text_align(titleLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_label_set_long_mode(titleLabel, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(titleLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(titleLabel, LV_OPA_0, LV_PART_MAIN);
+    //lv_obj_set_style_border_width(titleLabel, 1, LV_PART_MAIN);
+    //lv_obj_set_style_border_color(titleLabel, theme->borderColor, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(titleLabel, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_align(titleLabel, LV_ALIGN_TOP_MID, 0, 16);
+
+    lv_obj_t* valueLabel = lv_label_create(container1);
+    lv_label_set_text(valueLabel, Value);
+    lv_obj_set_style_text_font(valueLabel, theme->fontExtraBold32, LV_PART_MAIN);
+    lv_obj_set_style_text_align(valueLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_label_set_long_mode(valueLabel, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_color(valueLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(valueLabel, LV_OPA_0, LV_PART_MAIN);
+    //lv_obj_set_style_border_width(valueLabel, 1, LV_PART_MAIN);
+    //lv_obj_set_style_border_color(valueLabel, theme->borderColor, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(valueLabel, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_align(valueLabel, LV_ALIGN_BOTTOM_MID, 0, -16);
+
+
+}
 
 static void updateAutoTuneLabels(lv_timer_t* timer) 
 {
@@ -204,6 +281,7 @@ static void saveButtonEventHandler(lv_event_t* e) {
         lvgl_port_lock(-1);  // Lock for LVGL operations
         
         showSettingsConfirmationOverlay();
+        lv_refr_now(NULL);
         lvgl_port_unlock();
         delay(50);
         // Write entire buffer to BAP
@@ -538,13 +616,7 @@ static void autotuneSwitchEventHandler(lv_event_t* e)
     }
 }
 
-// This is used because Timelib day function is having issues
-const char* customDayStr(uint8_t day)
-{ 
-    static const char* const days[] = {"", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-    if (day > 7) return "";
-    return days[day];
-}
+
  
 // It is used to create a gradient effect on the main container
 // Not used at the moment due to performance hits
@@ -572,60 +644,6 @@ static void addMaskEventCallback(lv_event_t * e)
         lv_draw_mask_remove_id(maskId);
     }
 }
-
-static void updateLabels(lv_timer_t* timer) 
-{
-
-    
-    // Get values outside the lock
-    char ssid[32], ip[32], status[32], pool[64];
-    float hashrate = IncomingData.mining.hashrate;
-    float efficiency = IncomingData.mining.efficiency;
-    uint32_t shares = IncomingData.mining.shares;
-    float temp = IncomingData.monitoring.temperatures[0];
-    uint32_t acceptedShares = IncomingData.mining.acceptedShares;
-    uint32_t rejectedShares = IncomingData.mining.rejectedShares;
-    float rejectRatePercent = IncomingData.mining.rejectRatePercent;
-    uint32_t fanSpeed = IncomingData.monitoring.fanSpeed;
-    uint32_t asicFreq = IncomingData.monitoring.asicFrequency;
-    uint32_t uptime = IncomingData.monitoring.uptime;
-    float voltage = IncomingData.monitoring.powerStats.voltage;
-    float power = IncomingData.monitoring.powerStats.power;
-    float current = (voltage != 0) ? (power * 1000) / voltage : 0;
-    float domainVoltage = IncomingData.monitoring.powerStats.domainVoltage;
-    
-    // Lock for LVGL operations
-    if (lvgl_port_lock(10)) 
-    {  // 10ms timeout
-        lv_obj_t** labels = (lv_obj_t**)timer->user_data;
-        
-        // Batch all LVGL operations together
-        lv_label_set_text_fmt(labels[0], "SSID: %s", IncomingData.network.ssid);
-        lv_label_set_text_fmt(labels[1], "IP: %s", IncomingData.network.ipAddress);
-        lv_label_set_text_fmt(labels[2], "Status: %s", IncomingData.network.wifiStatus);
-        lv_label_set_text_fmt(labels[3], "Pool 1: %s:%d\nPool 2: %s:%d", IncomingData.network.poolUrl, IncomingData.network.poolPort, IncomingData.network.fallbackUrl, IncomingData.network.fallbackPort);
-        lv_label_set_text_fmt(labels[4], "Hashrate: %d.%02d GH/s", (int)hashrate, (int)(hashrate * 100) % 100);
-        lv_label_set_text_fmt(labels[5], "Efficiency: %d.%02d W/TH", (int)efficiency, (int)(efficiency * 100) % 100);
-        lv_label_set_text_fmt(labels[6], "Best Diff: %s", IncomingData.mining.bestDiff);
-        lv_label_set_text_fmt(labels[7], "Session Diff: %s", IncomingData.mining.sessionDiff);
-        lv_label_set_text_fmt(labels[8], "Accepted: %lu", acceptedShares);
-        lv_label_set_text_fmt(labels[9], "Rejected: %lu", rejectedShares);
-        lv_label_set_text_fmt(labels[10], "Temp: %d°C", (int)temp);
-        lv_label_set_text_fmt(labels[11], "Fan: %lu RPM", fanSpeed);
-        lv_label_set_text_fmt(labels[12], "Fan: %d%%", (int)IncomingData.monitoring.fanSpeedPercent);
-        lv_label_set_text_fmt(labels[13], "ASIC: %lu MHz", asicFreq);
-        lv_label_set_text_fmt(labels[14], "Uptime: %lu:%02lu:%02lu", (uptime / 3600), (uptime % 3600) / 60, uptime % 60);
-        lv_label_set_text_fmt(labels[15], "Voltage: %d.%02d V", (int)(voltage / 1000), (int)(voltage / 10) % 100);
-       // lv_label_set_text_fmt(labels[16], "Current: %d.%02d A", (int)(current / 1000), (int)(current / 10) % 100); // the TSP546 has incorrect current reading
-        lv_label_set_text_fmt(labels[16], "Current: %d.%02d A", (int)current, (int)(current * 100) % 100);
-        lv_label_set_text_fmt(labels[17], "Power: %d.%02d W", (int)power, (int)(power * 100) % 100);
-        lv_label_set_text_fmt(labels[18], "Domain: %d mV", (int)domainVoltage);
-        
-        lvgl_port_unlock();
-    }
-}
-
-
 
 void splashScreen()
 {
@@ -656,515 +674,12 @@ void splashScreen()
     lvgl_port_unlock();
 }
 
-static void clockContainerEventCallback(lv_event_t* e)
-{
-    lv_obj_t* obj = lv_event_get_target(e);
-    if (lv_obj_has_flag(obj, LV_OBJ_FLAG_CLICKABLE))
-    {
-        Serial.println("Clock Container Clicked");
-        clockContainerShown = !clockContainerShown;
-        blockClockContainerShown = !blockClockContainerShown;
-
-        if (clockContainerShown && blockClockContainerShown)
-        {
-            clockContainerShown = true;
-            blockClockContainerShown = false;
-
-        }
-        else if (!clockContainerShown && !blockClockContainerShown)
-        {
-            clockContainerShown = true;
-            blockClockContainerShown = false;
-        }
-
-        if (clockContainerShown)
-        {
-            lvgl_port_lock(10);
-            lv_obj_add_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            lvgl_port_unlock();
-        }
-
-        else if (blockClockContainerShown)
-        {
-            lvgl_port_lock(10);
-            lv_obj_clear_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            lvgl_port_unlock();
-        }
-
-            
-
-    }
-}
 
 
 
-void homeScreen() 
-{
-    uiTheme_t* theme = getCurrentTheme();
-    activeScreen = activeScreenHome;
-    /*
-    // Not using Logos on the home screen at the moment.
-    lv_obj_t* logos = lv_img_create(screenObjs.homeMainContainer);
-    lv_img_set_src(logos, "S:/Logos.png");
-    lv_obj_align(logos, LV_ALIGN_TOP_MID, 0, 0);
-    lv_img_set_zoom(logos, 384);
-    //lv_obj_align(mainContainerLabel, LV_ALIGN_CENTER, 0, 0);  // Initial alignment 
-    //lv_obj_add_style(mainContainerLabel, &mainContainerBorder, 0);
-   // lvgl_port_unlock();
-    */
-
-    // Create the clock container
-    lv_obj_t* clockContainer = lv_obj_create(screenObjs.homeMainContainer);
-    lv_obj_set_size(clockContainer, 672, 304);
-    lv_obj_align(clockContainer, LV_ALIGN_CENTER, 0, -48);
-    lv_obj_set_style_bg_opa(clockContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(clockContainer, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(clockContainer, LV_OBJ_FLAG_SCROLLABLE);
-    //lv_obj_set_style_border_width(clockContainer, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(clockContainer, lv_color_hex(0x00FF00), LV_PART_MAIN);
-    lv_obj_add_flag(clockContainer, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(clockContainer, clockContainerEventCallback, LV_EVENT_CLICKED, NULL);
-    
-    // Create the clock label
-    clockLabel = lv_label_create(clockContainer);
-    lv_label_set_text(clockLabel, "-- : --");
-    lv_obj_set_style_text_font(clockLabel, theme->fontExtraBold144, LV_PART_MAIN);
-    lv_obj_set_style_text_color(clockLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(clockLabel, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_text_align(clockLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(clockLabel, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(clockLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-
-    // Create the date label
-    dateLabel = lv_label_create(clockContainer);
-    lv_label_set_text(dateLabel, "Syncing . . .");
-    lv_obj_set_style_text_font(dateLabel, theme->fontExtraBold32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(dateLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_align(dateLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(dateLabel, LV_OPA_80, LV_PART_MAIN);
-    lv_obj_align(dateLabel, LV_ALIGN_BOTTOM_MID, 0, 16);
-    //lv_obj_set_style_border_width(dateLabel, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(dateLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-
-    // create block clock in clock container, hidden by default
-    blockClockLabel = lv_label_create(clockContainer);
-    lv_label_set_text(blockClockLabel, "Block Height:\n --");
-    lv_obj_set_style_text_font(blockClockLabel, theme->fontExtraBold72, LV_PART_MAIN);
-    lv_obj_set_style_text_color(blockClockLabel, theme->textColor, LV_PART_MAIN);
-
-    lv_obj_align(blockClockLabel, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_text_align(blockClockLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_add_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-    //lv_obj_set_style_border_width(clockLabel, 1, LV_PART_MAIN);
-
-    //lv_obj_set_style_border_color(clockLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-
-    // Create the halving label
-    halvingLabel = lv_label_create(clockContainer);
-    lv_label_set_text(halvingLabel, "Syncing . . .");
-    lv_obj_set_style_text_font(halvingLabel, theme->fontExtraBold32, LV_PART_MAIN);
-    lv_obj_set_style_text_color(halvingLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_align(halvingLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(halvingLabel, LV_OPA_80, LV_PART_MAIN);
-    lv_obj_align(halvingLabel, LV_ALIGN_BOTTOM_MID, 0, 24);
-    lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-    //lv_obj_set_style_border_width(dateLabel, 1, LV_PART_MAIN);
-
-
-    //lv_obj_set_style_border_color(dateLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-
-
-    
-
-    // Create the clock timer
-    screenObjs.clockTimer = lv_timer_create([](lv_timer_t* timer) 
-    {
-        if (clockContainerShown)
-        {
-            
-            // Get values outside the lock
-            uint8_t h = hourFormat12();
-            uint8_t m = minute();
-            uint8_t s = second();
-            uint8_t mo = month();
-            uint8_t d = day();
-
-
-        uint8_t w = weekday();
-        uint16_t y = year();    
-        bool isAm = isAM();
-
-        // Lock for LVGL operations
-        if (lvgl_port_lock(10)) 
-        {  // 10ms timeout
-            //lv_obj_clear_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
-            //lv_obj_clear_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            //lv_obj_add_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-            //lv_obj_add_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-            
-
-
-            // Check if the time is before 2000, This is used to check if the time has been set
-            if (now() < 946684800) 
-            {
-                Serial.println("Time is before 2000");
-                lv_label_set_text(dateLabel, "Syncing . . .");
-            }
-            else 
-            {
-                // Batch all LVGL operations together
-                lv_label_set_text_fmt(clockLabel, "%2d:%02d%s", h, m, isAm ? "AM" : "PM");
-                lv_label_set_text_fmt(dateLabel, "%s\n%s %d %d", customDayStr(w), monthStr(mo), d, y);
-            }
-            
-            lvgl_port_unlock();
-        }
-        }
-        else if (blockClockContainerShown)
-        {
-            
-
-
-            // Get values outside the lock
-            MempoolApiState* mempoolState = getMempoolState();
-            uint32_t blockHeight = mempoolState->blockHeight;
-            uint32_t blockToHalving = 1050000 - blockHeight;
-
-
-        // Lock for LVGL operations
-        if (lvgl_port_lock(10)) 
-        {  // 10ms timeout
-            //lv_obj_clear_flag(blockClockLabel, LV_OBJ_FLAG_HIDDEN);
-           // lv_obj_clear_flag(halvingLabel, LV_OBJ_FLAG_HIDDEN);
-            //lv_obj_add_flag(clockLabel, LV_OBJ_FLAG_HIDDEN);
-            //lv_obj_add_flag(dateLabel, LV_OBJ_FLAG_HIDDEN);
-            lv_label_set_text_fmt(blockClockLabel, "Block Height:\n %lu", blockHeight);
-            lv_label_set_text_fmt(halvingLabel, "Halving In:\n %lu Blocks", blockToHalving);
-            
-
-            lvgl_port_unlock();
-
-        }
-        }
-        
-
-    }, 1000, &clockLabel);
-}
-
-
-void activityScreen() 
-{
-    uiTheme_t* theme = getCurrentTheme();
-    activeScreen = activeScreenActivity;
-    //lvgl_port_lock(-1);
-
-    //This is used for Gradient 
-    /*static lv_opa_t maskMap[MASK_WIDTH * MASK_HEIGHT];
-    // Create canvas for mask
-    lv_obj_t * canvas = lv_canvas_create(screenObjs.activityMainContainer);
-    lv_canvas_set_buffer(canvas, maskMap, MASK_WIDTH, MASK_HEIGHT, LV_IMG_CF_ALPHA_8BIT);
-    lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
-
-    // Draw text to canvas
-    lv_draw_label_dsc_t labelDsc;
-    lv_draw_label_dsc_init(&labelDsc);
-    labelDsc.color = lv_color_white();
-    labelDsc.font = &interExtraBold56;
-    labelDsc.align = LV_TEXT_ALIGN_CENTER;
-    //lv_canvas_draw_text(canvas, 5, 5, MASK_WIDTH, &labelDsc, "10 : 00AM");
-
-    // Delete canvas after creating mask
-    lv_obj_del(canvas);
-    */ 
-
-    // Not using Logos on the activity screen at the moment.
-    /*
-    lv_obj_t* logos = lv_img_create(screenObjs.activityMainContainer);
-    lv_img_set_src(logos, "S:/Logos.png");
-    lv_obj_align(logos, LV_ALIGN_TOP_MID, 0, 0);
-    lv_img_set_zoom(logos, 384);
-    */
-
-    /*
-    // Create gradient object
-    lv_obj_t * gradObj = lv_obj_create(screenObjs.activityMainContainer);
-    lv_obj_set_size(gradObj, MASK_WIDTH, MASK_HEIGHT);
-    lv_obj_center(gradObj);
-    lv_obj_set_style_bg_color(gradObj, lv_color_hex(0x34D399), 0);
-    lv_obj_set_style_bg_grad_color(gradObj, lv_color_hex(0xA7F3D0), 0);
-    lv_obj_set_style_border_width(gradObj, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(gradObj, LV_OPA_0, LV_PART_MAIN);
-    //lv_obj_set_style_bg_grad_dir(gradObj, LV_GRAD_DIR_VER, 0);
-    //lv_obj_add_event_cb(gradObj, addMaskEventCallback, LV_EVENT_ALL, maskMap);
-    */
-
-    // Create container for network info
-    lv_obj_t* networkContainer = lv_obj_create(screenObjs.activityMainContainer);
-    lv_obj_set_size(networkContainer, 360, 184);
-    lv_obj_align(networkContainer, LV_ALIGN_TOP_LEFT, -24, 0);
-    lv_obj_set_style_bg_opa(networkContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(networkContainer, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(networkContainer, LV_OBJ_FLAG_SCROLLABLE);
-    //lv_obj_set_style_border_width(networkContainer, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(networkContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    Serial.println("Network Container Created");
-
-    //Network Container Label
-    lv_obj_t* networkContainerLabel = lv_label_create(networkContainer);
-    lv_label_set_text(networkContainerLabel, "Network");
-    lv_obj_set_style_text_font(networkContainerLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(networkContainerLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(networkContainerLabel, LV_ALIGN_TOP_LEFT, 0, -24);
-    Serial.println("Network Container Label Created");
-    // SSID Label
-    lv_obj_t* ssidLabel = lv_label_create(networkContainer);
-    lv_obj_set_style_text_font(ssidLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(ssidLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(ssidLabel, "SSID: %s", IncomingData.network.ssid);
-    lv_obj_align(ssidLabel, LV_ALIGN_TOP_LEFT, 16, 8);
-    Serial.println("SSID Label Created");
-    // IP Address Label
-    lv_obj_t* ipLabel = lv_label_create(networkContainer);
-    lv_obj_set_style_text_font(ipLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(ipLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(ipLabel, "IP: %s", IncomingData.network.ipAddress);
-    lv_obj_align(ipLabel, LV_ALIGN_TOP_LEFT, 16, 32);
-    Serial.println("IP Address Label Created");
-    // WiFi Status Label
-    lv_obj_t* wifiStatusLabel = lv_label_create(networkContainer);
-    lv_obj_set_style_text_font(wifiStatusLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(wifiStatusLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(wifiStatusLabel, "Status: %s", IncomingData.network.wifiStatus);
-    lv_obj_align(wifiStatusLabel, LV_ALIGN_TOP_LEFT, 16, 56);
-    Serial.println("WiFi Status Label Created");
-    // Pool Info Label
-    lv_obj_t* poolUrlLabel = lv_label_create(networkContainer);
-    lv_obj_set_style_text_font(poolUrlLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(poolUrlLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(poolUrlLabel, "Pool 1: %s:%d\nPool 2: %s:%d", IncomingData.network.poolUrl, IncomingData.network.poolPort, IncomingData.network.fallbackUrl, IncomingData.network.fallbackPort);
-    lv_obj_align(poolUrlLabel, LV_ALIGN_TOP_LEFT, 16, 80);
-    Serial.println("Pool Info Label Created");
-
-   
-
-    // Create container for mining info
-    lv_obj_t* miningContainer = lv_obj_create(screenObjs.activityMainContainer);
-    lv_obj_set_size(miningContainer, 304, 184);
-    lv_obj_align(miningContainer, LV_ALIGN_TOP_RIGHT, 16, 0);
-    lv_obj_set_style_bg_opa(miningContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(miningContainer, 0, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(miningContainer, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(miningContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_clear_flag(miningContainer, LV_OBJ_FLAG_SCROLLABLE);
-    Serial.println("Mining Container Created");
-
-    // Mining Container Label
-    lv_obj_t* miningContainerLabel = lv_label_create(miningContainer);
-    lv_label_set_text(miningContainerLabel, "Mining");
-    lv_obj_set_style_text_font(miningContainerLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(miningContainerLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(miningContainerLabel, LV_ALIGN_TOP_LEFT, 0, -24);
-    Serial.println("Mining Container Label Created");
-    // Hashrate Label
-    lv_obj_t* hashrateLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(hashrateLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(hashrateLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(hashrateLabel, "Hashrate: %d.%02d GH/s", (int)IncomingData.mining.hashrate, (int)(IncomingData.mining.hashrate * 100) % 100);
-    lv_obj_align(hashrateLabel, LV_ALIGN_TOP_LEFT, 16, 8);
-    Serial.println("Hashrate Label Created");
-    // Efficiency Label
-    lv_obj_t* efficiencyLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(efficiencyLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(efficiencyLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(efficiencyLabel, "Efficiency: %d.%02d W/TH", (int)IncomingData.mining.efficiency, (int)(IncomingData.mining.efficiency * 100) % 100);
-    lv_obj_align(efficiencyLabel, LV_ALIGN_TOP_LEFT, 16, 32);
-    Serial.println("Efficiency Label Created");
-    // Best Difficulty Label
-    lv_obj_t* bestDiffLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(bestDiffLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bestDiffLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(bestDiffLabel, "Best Diff: %s", IncomingData.mining.bestDiff);
-    lv_obj_align(bestDiffLabel, LV_ALIGN_TOP_LEFT, 16, 56);
-    Serial.println("Best Difficulty Label Created");
-    // Session Difficulty Label
-    lv_obj_t* sessionDiffLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(sessionDiffLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(sessionDiffLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(sessionDiffLabel, "Session Diff: %s", IncomingData.mining.sessionDiff);
-    lv_obj_align(sessionDiffLabel, LV_ALIGN_TOP_LEFT, 16, 80);
-    Serial.println("Session Difficulty Label Created");
-
-    /*// Shares Label
-    lv_obj_t* sharesLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(sharesLabel, &interMedium16_19px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(sharesLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_label_set_text_fmt(sharesLabel, "Shares: %u", IncomingData.mining.shares);
-    lv_obj_align(sharesLabel, LV_ALIGN_TOP_LEFT, 16, 104);
-    Serial.println("Shares Label Created");*/
-   
-    //accepted shares label
-    lv_obj_t* acceptedSharesLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(acceptedSharesLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(acceptedSharesLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(acceptedSharesLabel, "Accepted Shares: %u", IncomingData.mining.acceptedShares);
-    lv_obj_align(acceptedSharesLabel, LV_ALIGN_TOP_LEFT, 16, 104);
-    Serial.println("Accepted Shares Label Created");
-    //rejected shares label
-    lv_obj_t* rejectedSharesLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(rejectedSharesLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(rejectedSharesLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(rejectedSharesLabel, "Rejected Shares: %u", IncomingData.mining.rejectedShares);
-    lv_obj_align(rejectedSharesLabel, LV_ALIGN_TOP_LEFT, 16, 128);
-    Serial.println("Rejected Shares Label Created");
-
-    /*// rejected shares percent label
-    lv_obj_t* rejectedSharesPercentLabel = lv_label_create(miningContainer);
-    lv_obj_set_style_text_font(rejectedSharesPercentLabel, &interMedium16_19px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(rejectedSharesPercentLabel, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_label_set_text_fmt(rejectedSharesPercentLabel, "Reject Rate: %d.%02d%%", (int)IncomingData.mining.rejectRatePercent, (int)(IncomingData.mining.rejectRatePercent * 100) % 100);
-    lv_obj_align(rejectedSharesPercentLabel, LV_ALIGN_TOP_LEFT, 16, 176);
-    Serial.println("Rejected Shares Percent Label Created");*/
-
-
-    // Monitoring Container 
-    lv_obj_t* monitoringContainer = lv_obj_create(screenObjs.activityMainContainer);
-    lv_obj_set_size(monitoringContainer, 304, 152);
-    lv_obj_align(monitoringContainer, LV_ALIGN_BOTTOM_RIGHT, 16, 0);
-    Serial.println("Monitoring Container Created");
-    lv_obj_set_style_bg_opa(monitoringContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(monitoringContainer, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(monitoringContainer, LV_OBJ_FLAG_SCROLLABLE);
-    //lv_obj_set_style_border_color(monitoringContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-
-    // Monitoring Container Label
-    lv_obj_t* monitoringContainerLabel = lv_label_create(monitoringContainer);
-    lv_label_set_text(monitoringContainerLabel, "Monitoring");
-    lv_obj_set_style_text_font(monitoringContainerLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(monitoringContainerLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(monitoringContainerLabel, LV_ALIGN_TOP_LEFT, 0, -24);
-    Serial.println("Monitoring Container Label Created");
-    // Temperature Label
-    lv_obj_t* tempLabel = lv_label_create(monitoringContainer);
-    lv_obj_set_style_text_font(tempLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(tempLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(tempLabel, "Temp: %d°C", (int)IncomingData.monitoring.temperatures[0]);
-    lv_obj_align(tempLabel, LV_ALIGN_TOP_LEFT, 16, 8);
-    Serial.println("Temperature Label Created");
-    // Fan Speed Label
-    lv_obj_t* fanSpeedLabel = lv_label_create(monitoringContainer);
-    lv_obj_set_style_text_font(fanSpeedLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(fanSpeedLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(fanSpeedLabel, "Fan: %f RPM", IncomingData.monitoring.fanSpeed);
-    lv_obj_align(fanSpeedLabel, LV_ALIGN_TOP_LEFT, 16, 32);
-    Serial.println("Fan Speed Label Created");
-    // Fan Speed Percent Label
-    lv_obj_t* fanSpeedPercentLabel = lv_label_create(monitoringContainer);
-    lv_obj_set_style_text_font(fanSpeedPercentLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(fanSpeedPercentLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(fanSpeedPercentLabel, "Fan: %d%%", (int)IncomingData.monitoring.fanSpeedPercent);
-    lv_obj_align(fanSpeedPercentLabel, LV_ALIGN_TOP_LEFT, 16, 56);
-    Serial.println("Fan Speed Percent Label Created");
-    // asic Frequency Label
-    lv_obj_t* asicFreqLabel = lv_label_create(monitoringContainer);
-    lv_obj_set_style_text_font(asicFreqLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(asicFreqLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(asicFreqLabel, "ASIC: %lu MHz", IncomingData.monitoring.asicFrequency);
-    lv_obj_align(asicFreqLabel, LV_ALIGN_TOP_LEFT, 16, 80);
-    Serial.println("ASIC Frequency Label Created");
-    // uptime label
-    lv_obj_t* uptimeLabel = lv_label_create(monitoringContainer);
-    lv_obj_set_style_text_font(uptimeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(uptimeLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(uptimeLabel, "Uptime: %lu:%02lu:%02lu", (IncomingData.monitoring.uptime / 3600), (IncomingData.monitoring.uptime % 3600) / 60, IncomingData.monitoring.uptime % 60);
-    lv_obj_align(uptimeLabel, LV_ALIGN_TOP_LEFT, 16, 104);
-    Serial.println("Uptime Label Created");
-
-
-    // Power Container
-    lv_obj_t* powerContainer = lv_obj_create(screenObjs.activityMainContainer);
-    lv_obj_set_size(powerContainer, 360, 152);
-    lv_obj_align(powerContainer, LV_ALIGN_BOTTOM_LEFT, -24, 0);
-    lv_obj_set_style_bg_opa(powerContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(powerContainer, 0, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(powerContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);    
-    Serial.println("Power Container Created");
-    // Power Container Label
-    lv_obj_t* powerContainerLabel = lv_label_create(powerContainer);
-    lv_label_set_text(powerContainerLabel, "Power");
-    lv_obj_set_style_text_font(powerContainerLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(powerContainerLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(powerContainerLabel, LV_ALIGN_TOP_LEFT, 0, -24);
-    Serial.println("Power Container Label Created");
-    // voltage label
-    lv_obj_t* voltageLabel = lv_label_create(powerContainer);
-    lv_obj_set_style_text_font(voltageLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(voltageLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(voltageLabel, "Voltage: %d.%02d V", (int)(IncomingData.monitoring.powerStats.voltage / 1000), (int)(IncomingData.monitoring.powerStats.voltage / 10) % 100);
-    lv_obj_align(voltageLabel, LV_ALIGN_TOP_LEFT, 16, 8);
-    Serial.println("Voltage Label Created");
-    // current label
-    lv_obj_t* currentLabel = lv_label_create(powerContainer);
-    lv_obj_set_style_text_font(currentLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(currentLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(currentLabel, "Current: 0 A");
-    lv_obj_align(currentLabel, LV_ALIGN_TOP_LEFT, 16, 32);
-    Serial.println("Current Label Created");
-    // Power Label
-    lv_obj_t* powerLabel = lv_label_create(powerContainer);
-    lv_obj_set_style_text_font(powerLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(powerLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(powerLabel, "Power: %d.%02d W", (int)IncomingData.monitoring.powerStats.power, (int)(IncomingData.monitoring.powerStats.power * 100) % 100);
-    lv_obj_align(powerLabel, LV_ALIGN_TOP_LEFT, 16, 56);
-    Serial.println("Power Label Created");
-    // Domain Voltage Label
-    lv_obj_t* domainVoltageLabel = lv_label_create(powerContainer);
-    lv_obj_set_style_text_font(domainVoltageLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(domainVoltageLabel, theme->textColor, LV_PART_MAIN);
-    lv_label_set_text_fmt(domainVoltageLabel, "Asic Voltage: %d mV", (int)IncomingData.monitoring.powerStats.domainVoltage);
-    lv_obj_align(domainVoltageLabel, LV_ALIGN_TOP_LEFT, 16, 80);
-    Serial.println("Domain Voltage Label Created");
-    
 
 
 
-     static lv_obj_t* allLabels[19] = 
-    {
-        ssidLabel, ipLabel, wifiStatusLabel, poolUrlLabel,
-        hashrateLabel, efficiencyLabel, 
-        bestDiffLabel, sessionDiffLabel, acceptedSharesLabel, rejectedSharesLabel,
-        tempLabel, fanSpeedLabel, fanSpeedPercentLabel, asicFreqLabel, uptimeLabel, voltageLabel, currentLabel, powerLabel, domainVoltageLabel
-    };
-    screenObjs.labelUpdateTimer = lv_timer_create(updateLabels, 2000, allLabels);
-
-    //lv_obj_align(mainContainerLabel, LV_ALIGN_CENTER, 0, 0);  // Initial alignment 
-    //lv_obj_add_style(mainContainerLabel, &mainContainerBorder, 0);
-   // lvgl_port_unlock();
-
-
-}
-
-/*void miningStatusScreen() //TODO: Remove this screen
-{
-    activeScreen = activeScreenMining;
-    //lvgl_port_lock(-1);
-    lv_obj_t* miningStatusScreen = lv_obj_create(NULL);
-    lv_scr_load_anim(miningStatusScreen, LV_SCR_LOAD_ANIM_FADE_ON, 50, 0, true);
-
-    backgroundImage(miningStatusScreen);
-    lvglTabIcons(miningStatusScreen);
-    statusBar(miningStatusScreen);
-    mainContainer(miningStatusScreen);
-
-  hashrateGraph(screenObjs.miningMainContainer);
-  
-
-}*/
 
 
 
@@ -1174,10 +689,10 @@ void initalizeOneScreen()
     activeScreen = activeScreenHome;
 
     // Initialize timer pointers to NULL
-    screenObjs.labelUpdateTimer = NULL;
-    screenObjs.chartUpdateTimer = NULL;
+    screenObjs.deviceStatsLabelsUpdateTimer = NULL;
+    screenObjs.miningStatsLabelsUpdateTimer = NULL;
     screenObjs.clockTimer = NULL;
-    screenObjs.apiUpdateTimer = NULL;
+    screenObjs.btcStatsLabelsUpdateTimer = NULL;
 
     Serial.println("Timer Pointers Initialized");
     // Create and load the background screen
@@ -1208,8 +723,8 @@ void initalizeOneScreen()
     Serial.println("Activity Container Created");
 
     mainContainer(screenObjs.background);
-    screenObjs.bitcoinNewsMainContainer = lv_obj_get_child(screenObjs.background, -1);  // Get last created object
-    lv_obj_add_flag(screenObjs.bitcoinNewsMainContainer, LV_OBJ_FLAG_HIDDEN);
+    screenObjs.btcStatsMainContainer = lv_obj_get_child(screenObjs.background, -1);  // Get last created object
+    lv_obj_add_flag(screenObjs.btcStatsMainContainer, LV_OBJ_FLAG_HIDDEN);
     Serial.println("Bitcoin News Container Created");
 
     mainContainer(screenObjs.background);
@@ -1221,9 +736,9 @@ void initalizeOneScreen()
     activityScreen();
     homeScreen();
     Serial.println("Home Screen Created");
-    hashrateGraph(screenObjs.miningMainContainer);
+    miningStatsScreen();
     Serial.println("Hashrate Graph Created");
-    bitcoinNewsScreen();
+    btcStatsScreen();
     Serial.println("Bitcoin News Screen Created");
     settingsScreen();
     Serial.println("Settings Screen Created");
@@ -1231,15 +746,15 @@ void initalizeOneScreen()
     lv_obj_clear_flag(screenObjs.homeMainContainer, LV_OBJ_FLAG_HIDDEN);
     Serial.println("Home Screen Shown");
     // Create timers only after all objects are initialized
-    if (screenObjs.labelUpdateTimer) 
+    if (screenObjs.deviceStatsLabelsUpdateTimer) 
     {
-        lv_timer_pause(screenObjs.labelUpdateTimer);
-        Serial.println("Label Update Timer Paused");
+        lv_timer_pause(screenObjs.deviceStatsLabelsUpdateTimer);
+        Serial.println("Device Stats Labels Update Timer Paused");
     }
-    if (screenObjs.chartUpdateTimer) 
+    if (screenObjs.miningStatsLabelsUpdateTimer) 
     {
-        lv_timer_pause(screenObjs.chartUpdateTimer);
-        Serial.println("Chart Update Timer Paused");
+        lv_timer_pause(screenObjs.miningStatsLabelsUpdateTimer);
+        Serial.println("Mining Stats Labels Update Timer Paused");
     }
     if (screenObjs.clockTimer) 
     {
@@ -1268,156 +783,7 @@ float calculateMovingAverage(float newValue)
     return sum / SMOOTHING_WINDOW_SIZE;
 }
 
-void hashrateGraph(lv_obj_t* parent)
-{
-    uiTheme_t* theme = getCurrentTheme();
-    // Pool Footer Label
-    miningGraphFooterPoolLabel = lv_label_create(parent);
-    lv_label_set_text_fmt(miningGraphFooterPoolLabel, "Pool: %s", IncomingData.network.poolUrl);
-    lv_obj_set_style_text_font(miningGraphFooterPoolLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_align(miningGraphFooterPoolLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(miningGraphFooterPoolLabel, 320);
-    lv_label_set_long_mode(miningGraphFooterPoolLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(miningGraphFooterPoolLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(miningGraphFooterPoolLabel, LV_OPA_100, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(miningGraphFooterPoolLabel, 1, LV_PART_MAIN);
-   // lv_obj_set_style_border_color(miningGraphFooterPoolLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-    lv_obj_align(miningGraphFooterPoolLabel, LV_ALIGN_BOTTOM_LEFT,-16, 0);
 
-    // Diff Footer Label
-    miningGraphFooterDiffLabel = lv_label_create(parent);
-    lv_label_set_text_fmt(miningGraphFooterDiffLabel, "Difficulty: %s", IncomingData.mining.sessionDiff);
-    lv_obj_set_style_text_font(miningGraphFooterDiffLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_align(miningGraphFooterDiffLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(miningGraphFooterDiffLabel, 152);
-    lv_label_set_long_mode(miningGraphFooterDiffLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(miningGraphFooterDiffLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(miningGraphFooterDiffLabel, LV_OPA_100, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(miningGraphFooterDiffLabel, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(miningGraphFooterDiffLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-    lv_obj_align(miningGraphFooterDiffLabel, LV_ALIGN_BOTTOM_MID, 72, 0);
-
-    // Reject Rate Footer Label
-    miningGraphFooterRejectRatePercentLabel = lv_label_create(parent);
-    lv_label_set_text_fmt(miningGraphFooterRejectRatePercentLabel, "Reject Rate: %d.%02d%%", (int)IncomingData.mining.rejectRatePercent, (int)(IncomingData.mining.rejectRatePercent * 100) % 100);
-    lv_obj_set_style_text_font(miningGraphFooterRejectRatePercentLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_align(miningGraphFooterRejectRatePercentLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(miningGraphFooterRejectRatePercentLabel, 280);
-    lv_label_set_long_mode(miningGraphFooterRejectRatePercentLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(miningGraphFooterRejectRatePercentLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(miningGraphFooterRejectRatePercentLabel, LV_OPA_100, LV_PART_MAIN);
-   // lv_obj_set_style_border_width(miningGraphFooterRejectRatePercentLabel, 1, LV_PART_MAIN);
-   // lv_obj_set_style_border_color(miningGraphFooterRejectRatePercentLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-    lv_obj_align(miningGraphFooterRejectRatePercentLabel, LV_ALIGN_BOTTOM_MID, 296, 0);
-
-    // Hashrate Chart Label
-    lv_obj_t* hashrateChartLabel = lv_label_create(parent);
-    lv_label_set_text(hashrateChartLabel, "Hashrate");
-    lv_obj_set_style_text_font(hashrateChartLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(hashrateChartLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(hashrateChartLabel, LV_ALIGN_TOP_LEFT, 24, -16);
-
-     // Hashrate Label
-    miningGraphHashrateLabel = lv_label_create(parent);
-    lv_label_set_text_fmt(miningGraphHashrateLabel, "%d.%02d GH/s", (int)IncomingData.mining.hashrate, (int)(IncomingData.mining.hashrate * 100) % 100);
-    lv_obj_set_style_text_font(miningGraphHashrateLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_align(miningGraphHashrateLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(miningGraphHashrateLabel, 296);
-    lv_label_set_long_mode(miningGraphHashrateLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_color(miningGraphHashrateLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(miningGraphHashrateLabel, LV_OPA_100, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(miningGraphFooterHashrateLabel, 1, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(miningGraphFooterHashrateLabel, lv_color_hex(0x00FF00), LV_PART_MAIN);
-    lv_obj_align(miningGraphHashrateLabel, LV_ALIGN_TOP_LEFT, 136, -16);
-
-    lv_obj_t* miningStatusHashRateChart = lv_chart_create(parent);
-    lv_obj_set_size(miningStatusHashRateChart, 648, 280);
-    lv_obj_align(miningStatusHashRateChart, LV_ALIGN_CENTER, 32, -16);
-    lv_obj_set_style_bg_opa(miningStatusHashRateChart, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_side(miningStatusHashRateChart, LV_BORDER_SIDE_BOTTOM, LV_PART_MAIN);
-    lv_obj_set_style_border_width(miningStatusHashRateChart, 4, LV_PART_MAIN);
-    lv_obj_set_style_border_color(miningStatusHashRateChart, theme->borderColor, LV_PART_MAIN);
-    lv_chart_set_type(miningStatusHashRateChart, LV_CHART_TYPE_LINE);
-
-    // Add these style configurations
-    lv_obj_set_style_line_width(miningStatusHashRateChart, 4, LV_PART_ITEMS);    // Make lines thicker
-    lv_obj_set_style_size(miningStatusHashRateChart, 0, LV_PART_INDICATOR);      // Make points bigger
-    //lv_obj_set_style_radius(miningStatusHashRateChart, 24, LV_PART_INDICATOR);    // Make points rounder
-
-    // Optional: Add drop shadow to make it look even better
-    //lv_obj_set_style_shadow_width(miningStatusHashRateChart, 32, LV_PART_ITEMS);
-    //lv_obj_set_style_shadow_color(miningStatusHashRateChart, lv_color_hex(0xA7F3D0), LV_PART_ITEMS);
-    //lv_obj_set_style_shadow_opa(miningStatusHashRateChart, LV_OPA_30, LV_PART_ITEMS);
-
-    // Style the grid lines
-    //lv_obj_set_style_line_color(miningStatusHashRateChart, lv_color_hex(0xBBBBBB), LV_PART_MAIN);  // Grid color
-    //lv_obj_set_style_line_width(miningStatusHashRateChart, 4, LV_PART_MAIN);  // Grid line thickness
-    lv_obj_set_style_line_opa(miningStatusHashRateChart, LV_OPA_TRANSP, LV_PART_MAIN);  // Grid line opacity
-    //lv_obj_set_style_shadow_width(miningStatusHashRateChart, 12, LV_PART_MAIN);
-    //lv_obj_set_style_shadow_color(miningStatusHashRateChart, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    //lv_obj_set_style_shadow_opa(miningStatusHashRateChart, LV_OPA_30, LV_PART_MAIN);
-
-    // Set chart properties with buffer of 100 on each end
-    float baseHashrate = abs(IncomingData.mining.hashrate);
-    //lv_chart_set_range(miningStatusHashRateChart, LV_CHART_AXIS_PRIMARY_Y, 0, 1000);
-
-    // Set the number of points to display
-    lv_chart_set_point_count(miningStatusHashRateChart, 50);  // How many points to display
-
-    // Add series
-    lv_chart_series_t* hashRateSeries = lv_chart_add_series(miningStatusHashRateChart, theme->primaryColor, LV_CHART_AXIS_PRIMARY_Y);
-
-    // Only add initial points if we have valid data
-
-        for(int i = 0; i < 50; i++) 
-        {
-            lv_chart_set_next_value(miningStatusHashRateChart, hashRateSeries, IncomingData.mining.hashrate);
-        }
-
-    // Update timer to use actual hashrate
-    screenObjs.chartUpdateTimer = lv_timer_create([](lv_timer_t* timer) 
-    {
-        // Get values outside the lock
-        float currentHashrate = IncomingData.mining.hashrate;
-        char poolUrl[128];
-        uint16_t poolPort = IncomingData.network.poolPort;
-        strlcpy(poolUrl, IncomingData.network.poolUrl, sizeof(poolUrl));
-        
-        // Calculate derived values
-        float smoothedHashrate = calculateMovingAverage(currentHashrate);
-        float rejectRatePercent = IncomingData.mining.rejectRatePercent;
-        // Lock for LVGL operations
-        if (lvgl_port_lock(10)) 
-        {  // 10ms timeout
-            lv_obj_t* chart = (lv_obj_t*)timer->user_data;
-            lv_chart_series_t* series = lv_chart_get_series_next(chart, NULL);
-            
-            // Batch all LVGL operations together
-            lv_label_set_text_fmt(miningGraphFooterPoolLabel, "Pool: %s:%d", poolUrl, poolPort);
-            lv_label_set_text_fmt(miningGraphHashrateLabel, "%d.%02d GH/s", (int)currentHashrate, (int)(currentHashrate * 100) % 100);
-            lv_label_set_text_fmt(miningGraphFooterRejectRatePercentLabel, "Reject Rate: %d.%02d%%", (int)rejectRatePercent, (int)(rejectRatePercent * 100) % 100);
-            lv_label_set_text_fmt(miningGraphFooterDiffLabel, "Difficulty: %s", IncomingData.mining.sessionDiff);
-            
-            if (smoothedHashrate < minHashrateSeen || smoothedHashrate > maxHashrateSeen) {
-                if (smoothedHashrate < minHashrateSeen) minHashrateSeen = smoothedHashrate;
-                if (smoothedHashrate > maxHashrateSeen) maxHashrateSeen = smoothedHashrate;
-                
-                lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 
-                    (minHashrateSeen > 100) ? minHashrateSeen - 100 : 0,
-                    maxHashrateSeen + 100);
-            }
-            
-            lv_chart_set_next_value(chart, series, smoothedHashrate);
-            lvgl_port_unlock();
-        }
-    }, 2000, miningStatusHashRateChart);
-
-    // Optional: Add axis labels
-    lv_chart_set_axis_tick(miningStatusHashRateChart, LV_CHART_AXIS_PRIMARY_Y, 5, 5, 6, 4, true, 50);
-    lv_obj_clear_flag(miningStatusHashRateChart, LV_OBJ_FLAG_SCROLLABLE);
-    //lvgl_port_unlock();
-
-}
 
 static void updateMempoolAPIInfo(lv_timer_t* timer) 
 {
@@ -1471,222 +837,6 @@ static void updateMempoolAPIInfo(lv_timer_t* timer)
     }
 }
 
-void bitcoinNewsScreen()
-{
-    uiTheme_t* theme = getCurrentTheme();
-    activeScreen = activeScreenBitcoinNews;
-
-    lv_obj_t* btcPriceContainer = lv_obj_create(screenObjs.bitcoinNewsMainContainer);
-    lv_obj_set_size(btcPriceContainer, 320, 192 );
-    lv_obj_align(btcPriceContainer, LV_ALIGN_TOP_LEFT, -16, -16);
-    lv_obj_set_style_bg_opa(btcPriceContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(btcPriceContainer, LV_OPA_0, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(btcPriceContainer, 2, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(btcPriceContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-
-    // BTC Price Label
-    lv_obj_t* btcPriceLabel = lv_label_create(btcPriceContainer);
-    lv_label_set_text(btcPriceLabel, "BTC PRICE");
-    lv_obj_set_style_text_font(btcPriceLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcPriceLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcPriceLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(btcPriceContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Price Value Label
-    lv_obj_t* btcPriceValueLabel = lv_label_create(btcPriceContainer);
-    lv_label_set_text_fmt(btcPriceValueLabel, "$%d,%03d", (int)(IncomingData.api.btcPriceUSD/1000), (int)(IncomingData.api.btcPriceUSD) % 1000);
-    lv_obj_set_style_text_font(btcPriceValueLabel, theme->fontExtraBold56, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcPriceValueLabel, theme->primaryColor, LV_PART_MAIN);
-    lv_obj_align(btcPriceValueLabel, LV_ALIGN_TOP_LEFT, 0, 56);
-
-    // BTC Hashrate and Difficulty Container
-    lv_obj_t* btcHashrateDiffContainer = lv_obj_create(screenObjs.bitcoinNewsMainContainer);
-    lv_obj_set_size(btcHashrateDiffContainer, 320, 192);
-    lv_obj_align(btcHashrateDiffContainer, LV_ALIGN_TOP_RIGHT, 16, -16);
-    lv_obj_set_style_bg_opa(btcHashrateDiffContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(btcHashrateDiffContainer, LV_OPA_0, LV_PART_MAIN);
-    //lv_obj_set_style_border_width(btcHashrateDiffContainer, 2, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(btcHashrateDiffContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-
-    // BTC Network Hashrate and Difficulty Container Label
-    lv_obj_t* btcNetworkMiningContainerLabel = lv_label_create(btcHashrateDiffContainer);
-    lv_label_set_text(btcNetworkMiningContainerLabel, "BTC NETWORK");
-    lv_obj_set_style_text_font(btcNetworkMiningContainerLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcNetworkMiningContainerLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcNetworkMiningContainerLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(btcNetworkMiningContainerLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Network Hashrate Label
-    lv_obj_t* btcNetworkHashrateLabel = lv_label_create(btcHashrateDiffContainer);
-    lv_label_set_text_fmt(btcNetworkHashrateLabel, "Hashrate: %d.%02d EH/s", (int)(IncomingData.api.networkHashrate / 1e18), (int)(IncomingData.api.networkHashrate / 1e18) % 100);
-    lv_obj_set_style_text_font(btcNetworkHashrateLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcNetworkHashrateLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcNetworkHashrateLabel, LV_ALIGN_TOP_LEFT, 0, 32);
-
-    // BTC Network Difficulty Label
-    lv_obj_t* btcNetworkDifficultyLabel = lv_label_create(btcHashrateDiffContainer);
-    lv_label_set_text_fmt(btcNetworkDifficultyLabel, "Difficulty: %d.%02d T", (int)(IncomingData.api.networkDifficulty / 1e12), (int)(IncomingData.api.networkDifficulty / 1e12) % 100);
-    lv_obj_set_style_text_font(btcNetworkDifficultyLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcNetworkDifficultyLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcNetworkDifficultyLabel, LV_ALIGN_TOP_LEFT, 0, 56);
-
-    // BTC Block Height Label
-    lv_obj_t* btcBlockHeightLabel = lv_label_create(btcHashrateDiffContainer);
-    lv_label_set_text_fmt(btcBlockHeightLabel, "Block Height: %lu", IncomingData.api.blockHeight);
-    lv_obj_set_style_text_font(btcBlockHeightLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcBlockHeightLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcBlockHeightLabel, LV_ALIGN_TOP_LEFT, 0, 80);
-
-    // BTC Remaining Blocks to Halving Label
-    lv_obj_t* btcRemainingBlocksToHalvingLabel = lv_label_create(btcHashrateDiffContainer);
-    lv_label_set_text_fmt(btcRemainingBlocksToHalvingLabel, "Blocks to Halving: %lu", 1050000 - IncomingData.api.blockHeight);
-    lv_obj_set_style_text_font(btcRemainingBlocksToHalvingLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcRemainingBlocksToHalvingLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcRemainingBlocksToHalvingLabel, LV_ALIGN_TOP_LEFT, 0, 104);
-
-    // BTC Difficulty Stats Container
-    lv_obj_t* btcDifficultyStatsContainer = lv_obj_create(screenObjs.bitcoinNewsMainContainer);
-    lv_obj_set_size(btcDifficultyStatsContainer, 320, 184);
-    lv_obj_align(btcDifficultyStatsContainer, LV_ALIGN_BOTTOM_LEFT, -16, 16);
-    lv_obj_set_style_bg_opa(btcDifficultyStatsContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btcDifficultyStatsContainer, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(btcDifficultyStatsContainer, LV_OPA_0, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(btcDifficultyStatsContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_clear_flag(btcDifficultyStatsContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Difficulty Progress Label
-    lv_obj_t* btcDifficultyProgressLabel = lv_label_create(btcDifficultyStatsContainer);
-    lv_label_set_text(btcDifficultyProgressLabel, "DIFFICULTY PROGRESS");
-    lv_obj_set_style_text_font(btcDifficultyProgressLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcDifficultyProgressLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_set_style_text_align(btcDifficultyProgressLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_align(btcDifficultyProgressLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(btcDifficultyProgressLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    //Difficulty Progress Bar
-    static lv_style_t styleBarBG;
-    static lv_style_t styleBarIndicator;
-    lv_style_init(&styleBarIndicator);
-    //lv_style_set_radius(&styleBar, LV_RADIUS_CIRCLE);
-    lv_style_set_border_color(&styleBarIndicator, theme->borderColor);
-    lv_style_set_bg_opa(&styleBarIndicator, LV_OPA_70);
-    lv_style_set_bg_color(&styleBarIndicator, theme->primaryColor);
-    lv_style_set_radius(&styleBarIndicator, 8);
-
-    lv_style_init(&styleBarBG);
-    lv_style_set_border_color(&styleBarBG, theme->borderColor);
-    lv_style_set_bg_opa(&styleBarBG, LV_OPA_30);
-    lv_style_set_bg_color(&styleBarBG, theme->primaryColor);
-    lv_style_set_radius(&styleBarBG, 12);
-
-    lv_obj_t* btcDifficultyProgressBar = lv_bar_create(btcDifficultyStatsContainer);
-    lv_obj_set_size(btcDifficultyProgressBar, 304, 144);
-    lv_obj_align(btcDifficultyProgressBar, LV_ALIGN_TOP_LEFT, -16, 16);
-    lv_obj_add_style(btcDifficultyProgressBar, &styleBarBG, LV_PART_MAIN);
-    lv_obj_add_style(btcDifficultyProgressBar, &styleBarIndicator, LV_PART_INDICATOR);
-    lv_bar_set_value(btcDifficultyProgressBar, (int)(IncomingData.api.difficultyProgressPercent), LV_ANIM_OFF);
-    //lv_obj_set_style_bg_opa(btcDifficultyProgressBar, LV_OPA_80, LV_PART_MAIN);
-    
-    // BTC Difficulty Progress Percent Label
-    lv_obj_t* btcDifficultyProgressPercentLabel = lv_label_create(btcDifficultyProgressBar);
-    lv_label_set_text_fmt(btcDifficultyProgressPercentLabel, "PROGRESS: %d.%02d%%\nREMAINING BLOCKS: %lu\nREMAINING TIME: %lu:%02luh\nESTIMATED CHANGE: %s%d.%02d%%", 
-        (int)(IncomingData.api.difficultyProgressPercent), 
-        (int)(IncomingData.api.difficultyProgressPercent * 100) % 100,
-        IncomingData.api.remainingBlocksToDifficultyAdjustment,
-        IncomingData.api.remainingTimeToDifficultyAdjustment / 86400, 
-        (IncomingData.api.remainingTimeToDifficultyAdjustment / 3600) % 24,
-        // Add %s in format string for the sign
-        IncomingData.api.difficultyChangePercent < 0 ? "-" : "",
-        // Use abs() for the whole number
-        abs((int)IncomingData.api.difficultyChangePercent),
-        // Use abs() for the decimal part
-        abs((int)(IncomingData.api.difficultyChangePercent * 100) % 100)
-    );
-    
-    lv_obj_set_style_text_font(btcDifficultyProgressPercentLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcDifficultyProgressPercentLabel, theme->backgroundColor, LV_PART_MAIN);
-    lv_obj_align(btcDifficultyProgressPercentLabel, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_clear_flag(btcDifficultyProgressPercentLabel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_label_set_long_mode(btcDifficultyProgressPercentLabel, LV_LABEL_LONG_CLIP);
-    lv_obj_set_style_text_align(btcDifficultyProgressPercentLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_width(btcDifficultyProgressPercentLabel, 288);
-    //lv_obj_set_style_border_width(btcDifficultyProgressPercentLabel, 2, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(btcDifficultyProgressPercentLabel, lv_color_hex(0x000000), LV_PART_MAIN);
-
-    // BTC Fees Container
-    lv_obj_t* btcFeesContainer = lv_obj_create(screenObjs.bitcoinNewsMainContainer);
-    lv_obj_set_size(btcFeesContainer, 320, 184);
-    lv_obj_align(btcFeesContainer, LV_ALIGN_BOTTOM_RIGHT, 16, 16);
-    lv_obj_set_style_bg_opa(btcFeesContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(btcFeesContainer, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(btcFeesContainer, LV_OPA_0, LV_PART_MAIN);
-    //lv_obj_set_style_border_color(btcFeesContainer, lv_color_hex(0xA7F3D0), LV_PART_MAIN);
-    lv_obj_clear_flag(btcFeesContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Fees Label
-    lv_obj_t* btcFeesLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text(btcFeesLabel, "NETWORK FEES");
-    lv_obj_set_style_text_font(btcFeesLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcFeesLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcFeesLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(btcFeesLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Fastest Fee Label
-    lv_obj_t* btcFastestFeeLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text_fmt(btcFastestFeeLabel, "Fastest Fee: %d SAT/B", (int)(IncomingData.api.fastestFee));
-    lv_obj_set_style_text_font(btcFastestFeeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcFastestFeeLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcFastestFeeLabel, LV_ALIGN_TOP_LEFT, 0, 32);
-    lv_obj_clear_flag(btcFastestFeeLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Half Hour Fee Label
-    lv_obj_t* btcHalfHourFeeLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text_fmt(btcHalfHourFeeLabel, "Half Hour Fee: %d SAT/B", (int)(IncomingData.api.halfHourFee));
-    lv_obj_set_style_text_font(btcHalfHourFeeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcHalfHourFeeLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcHalfHourFeeLabel, LV_ALIGN_TOP_LEFT, 0, 56);
-    lv_obj_clear_flag(btcHalfHourFeeLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Hour Fee Label
-    lv_obj_t* btcHourFeeLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text_fmt(btcHourFeeLabel, "Hour Fee: %d SAT/B", (int)(IncomingData.api.hourFee));
-    lv_obj_set_style_text_font(btcHourFeeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcHourFeeLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcHourFeeLabel, LV_ALIGN_TOP_LEFT, 0, 80);
-    lv_obj_clear_flag(btcHourFeeLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Economy Fee Label   
-    lv_obj_t* btcEconomyFeeLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text_fmt(btcEconomyFeeLabel, "Economy Fee: %d SAT/B", (int)(IncomingData.api.economyFee));
-    lv_obj_set_style_text_font(btcEconomyFeeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcEconomyFeeLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcEconomyFeeLabel, LV_ALIGN_TOP_LEFT, 0, 104);
-    lv_obj_clear_flag(btcEconomyFeeLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    // BTC Minimum Fee Label
-    lv_obj_t* btcMinimumFeeLabel = lv_label_create(btcFeesContainer);
-    lv_label_set_text_fmt(btcMinimumFeeLabel, "Minimum Fee: %d SAT/B", (int)(IncomingData.api.minimumFee));
-    lv_obj_set_style_text_font(btcMinimumFeeLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(btcMinimumFeeLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(btcMinimumFeeLabel, LV_ALIGN_TOP_LEFT, 0, 128);
-    lv_obj_clear_flag(btcMinimumFeeLabel, LV_OBJ_FLAG_SCROLLABLE);
-
-    static lv_obj_t* mempoolAPILabels[12]; // Adjust size as needed
-    mempoolAPILabels[0] = btcPriceValueLabel;
-    mempoolAPILabels[1] = btcNetworkHashrateLabel;
-    mempoolAPILabels[2] = btcNetworkDifficultyLabel;
-    mempoolAPILabels[3] = btcBlockHeightLabel;
-    mempoolAPILabels[4] = btcRemainingBlocksToHalvingLabel;
-    mempoolAPILabels[5] = btcDifficultyProgressBar;
-    mempoolAPILabels[6] = btcDifficultyProgressPercentLabel;
-    mempoolAPILabels[7] = btcFastestFeeLabel;
-    mempoolAPILabels[8] = btcHalfHourFeeLabel;
-    mempoolAPILabels[9] = btcHourFeeLabel;
-    mempoolAPILabels[10] = btcEconomyFeeLabel;
-    mempoolAPILabels[11] = btcMinimumFeeLabel;
-
-    screenObjs.apiUpdateTimer = lv_timer_create(updateMempoolAPIInfo, 3000, mempoolAPILabels);
-}
 static lv_obj_t * kb;
 static void ta_event_cb(lv_event_t * e);
  static void setCursorStyles(lv_obj_t * ta);
@@ -1735,17 +885,18 @@ static void power_mode_event_cb(lv_event_t* e) {
     if(code == LV_EVENT_VALUE_CHANGED) {
         if(lv_obj_has_state(obj, LV_STATE_CHECKED)) {
             // Uncheck other checkboxes
-            if(obj != lowPowerMode) lv_obj_clear_state(lowPowerMode, LV_STATE_CHECKED);
-            if(obj != normalPowerMode) lv_obj_clear_state(normalPowerMode, LV_STATE_CHECKED);
-            if(obj != highPowerMode) lv_obj_clear_state(highPowerMode, LV_STATE_CHECKED);
+            if(obj != quietMode) lv_obj_clear_state(quietMode, LV_STATE_CHECKED);
+            if(obj != balancedMode) lv_obj_clear_state(balancedMode, LV_STATE_CHECKED);
+            if(obj != turboMode) lv_obj_clear_state(turboMode, LV_STATE_CHECKED);
+            lv_refr_now(NULL);
             
             // Handle power mode change
-            if(obj == lowPowerMode) {
-                setLowPowerPreset();
-            } else if(obj == normalPowerMode) {
-                setNormalPowerPreset();
-            } else if(obj == highPowerMode) {
-                setHighPowerPreset();
+            if(obj == quietMode) {
+                setQuietPreset();
+            } else if(obj == balancedMode) {
+                setBalancedPreset();
+            } else if(obj == turboMode) {
+                setTurboPreset();
             }
         } else {
             // Prevent unchecking the last checked checkbox
@@ -1863,6 +1014,7 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     lv_refr_now(NULL);
     delay(100);
 
+/*
     // Ensure WiFi is properly disconnected and in the correct mode
     WiFi.disconnect(true);  // true = disable WiFi altogether
     delay(20);
@@ -1872,7 +1024,7 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     
     WiFi.mode(WIFI_STA);    // Re-enable WiFi in station mode
     delay(20);
-    
+*/
     // Now safe to scan
     listNetworks();  // Scan for networks
     
@@ -1905,47 +1057,52 @@ static void settingsWifiListRescanButtonEventHandler(lv_event_t* e) {
     }
 }
 
+static void screenBrightnessSliderEventHandler(lv_event_t* e) {
+    lv_obj_t* slider = lv_event_get_target(e);
+    uint8_t value = lv_slider_get_value(slider);
+    setBrightness(value);
+}
+
 void settingsScreen()
 {
     uiTheme_t* theme = getCurrentTheme();
     activeScreen = activeScreenSettings;
 
 
-    lv_obj_t * settingTabView = lv_tabview_create(screenObjs.settingsMainContainer, LV_DIR_BOTTOM, 72);
+    screenObjs.settingTabView = lv_tabview_create(screenObjs.settingsMainContainer, LV_DIR_BOTTOM, 72);
+    lv_obj_set_size(screenObjs.settingsMainContainer, 644, 392);
     // Make tileview transparent
-    lv_obj_set_style_bg_opa(settingTabView, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(settingTabView, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_clear_flag(lv_tabview_get_content(settingTabView), LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(screenObjs.settingTabView, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(screenObjs.settingTabView, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_clear_flag(lv_tabview_get_content(screenObjs.settingTabView), LV_OBJ_FLAG_SCROLLABLE);
     
-    lv_obj_set_size(settingTabView, 672, 392);
-    lv_obj_align(settingTabView, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_border_opa(settingTabView, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_width(settingTabView, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(settingTabView, theme->borderColor, LV_PART_MAIN);
-    lv_obj_clear_flag(settingTabView, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(screenObjs.settingTabView, 644, 392);
+    lv_obj_align(screenObjs.settingTabView, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_border_opa(screenObjs.settingTabView, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(screenObjs.settingTabView, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(screenObjs.settingTabView, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(screenObjs.settingTabView, LV_OBJ_FLAG_SCROLLABLE);
 
 
-    lv_obj_t * networkSettingsTab = lv_tabview_add_tab(settingTabView, "WIFI");
+    lv_obj_t * networkSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "WIFI");
     lv_obj_clear_flag(networkSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * miningSettingsTab = lv_tabview_add_tab(settingTabView, "MINING");
-    lv_obj_clear_flag(miningSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * asicSettingsTab = lv_tabview_add_tab(settingTabView, "PRESET");
+    lv_obj_t * screenSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "SCREEN");
+    lv_obj_clear_flag(screenSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t * asicSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "PRESET");
     lv_obj_clear_flag(asicSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * autoTuneSettingsTab = lv_tabview_add_tab(settingTabView, "TUNE");
-    lv_obj_clear_flag(autoTuneSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * themeSettingsTab = lv_tabview_add_tab(settingTabView, "THEME");
+    lv_obj_t * themeSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "THEME");
     lv_obj_clear_flag(themeSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t * timeSettingsTab = lv_tabview_add_tab(settingTabView, "TIME");
+    lv_obj_t * timeSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "TIME");
     lv_obj_clear_flag(timeSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
     #if (DEBUG_UI == 1)
-    lv_obj_t * debugSettingsTab = lv_tabview_add_tab(settingTabView, "DEBUG");
+    lv_obj_t * debugSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "DEBUG");
     lv_obj_clear_flag(debugSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
     #endif
-    lv_obj_t * saveSettingsTab = lv_tabview_add_tab(settingTabView, "SAVE");
+    lv_obj_t * saveSettingsTab = lv_tabview_add_tab(screenObjs.settingTabView, "SAVE");
 
     lv_obj_clear_flag(saveSettingsTab, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t * tab_btns = lv_tabview_get_tab_btns(settingTabView);
+    lv_obj_t * tab_btns = lv_tabview_get_tab_btns(screenObjs.settingTabView);
     lv_obj_set_style_bg_color(tab_btns, lv_palette_darken(LV_PALETTE_GREY, 3), 0);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_0, LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(tab_btns, LV_OPA_0, LV_PART_ITEMS | LV_STATE_DEFAULT);
@@ -1964,6 +1121,42 @@ void settingsScreen()
     lv_obj_set_style_bg_opa(networkSettingsTab, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_border_opa(networkSettingsTab, LV_OPA_0, LV_PART_MAIN);
 
+    // Network Settings Connected State
+   networkSettingsContainerConnectedState = lv_obj_create(networkSettingsTab);
+    lv_obj_set_size(networkSettingsContainerConnectedState, 572, 288);
+    lv_obj_align(networkSettingsContainerConnectedState, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_opa(networkSettingsContainerConnectedState, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(networkSettingsContainerConnectedState, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_clear_flag(networkSettingsContainerConnectedState, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(networkSettingsContainerConnectedState, LV_OBJ_FLAG_HIDDEN);
+
+     
+
+    quadContainer(networkSettingsContainerConnectedState, currentIPContainer, webUIVersionContainer, ssidContainer, connectQrCodeContainer);
+    lv_obj_set_style_border_opa(currentIPContainer, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(webUIVersionContainer, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(ssidContainer, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(connectQrCodeContainer, LV_OPA_0, LV_PART_MAIN);
+    quadContainerContent(currentIPContainer, "CURRENT IP", "SYNC");
+    quadContainerContent(webUIVersionContainer, "WEB UI VERSION", "SYNC");
+    quadContainerContent(ssidContainer, "SSID", "SYNC");
+    quadContainerContent(connectQrCodeContainer, "CONNECT", " ");
+
+
+
+    // QR Code
+    static char urlString[100];
+    static String ipString = WiFi.localIP().toString();
+    snprintf(urlString, sizeof(urlString), "http://%s/ota", ipString.c_str());
+
+    // OTA QR Code
+    webUIqrCode = lv_qrcode_create(connectQrCodeContainer, 128, lv_color_hex(0xffffff), theme->backgroundColor);
+    if (WiFi.status() == WL_CONNECTED) 
+    {
+        lv_qrcode_update(webUIqrCode, IncomingData.network.ipAddress, strlen(IncomingData.network.ipAddress));
+    }
+    lv_obj_align(webUIqrCode, LV_ALIGN_BOTTOM_MID, 0, 16);
+
 
     // Network Settings Container
     networkSettingsContainer = lv_obj_create(networkSettingsTab);
@@ -1980,6 +1173,7 @@ void settingsScreen()
     lv_obj_set_style_text_color(networkSettingsLabel, theme->textColor, LV_PART_MAIN);
     lv_obj_align(networkSettingsLabel, LV_ALIGN_TOP_LEFT, 0, -16);
     lv_obj_clear_flag(networkSettingsLabel, LV_OBJ_FLAG_SCROLLABLE);
+
 
 /*
     // Hostname Text Area
@@ -2131,88 +1325,86 @@ void settingsScreen()
     lv_obj_set_style_text_opa(settingsConfirmWifiBtnLabel, LV_OPA_100, LV_PART_MAIN);
     lv_obj_center(settingsConfirmWifiBtnLabel);
 
-    // Mining Settings Container
-    lv_obj_t* miningSettingsContainer = lv_obj_create(miningSettingsTab);
-    lv_obj_set_size(miningSettingsContainer, 672, 312);
-    lv_obj_align(miningSettingsContainer, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_opa(miningSettingsContainer, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(miningSettingsContainer, LV_OPA_0, LV_PART_MAIN);
+    // Screen Settings Container
+    lv_obj_t* screenSettingsContainer = lv_obj_create(screenSettingsTab);
+    lv_obj_set_size(screenSettingsContainer, 672, 312);
+    lv_obj_align(screenSettingsContainer, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_opa(screenSettingsContainer, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_opa(screenSettingsContainer, LV_OPA_0, LV_PART_MAIN);
 
-    // Mining Settings Label
-    lv_obj_t* miningSettingsLabel = lv_label_create(miningSettingsContainer);
-    lv_label_set_text(miningSettingsLabel, "ADVANCED MINING SETTINGS");
-    lv_obj_set_style_text_font(miningSettingsLabel, theme->fontMedium24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(miningSettingsLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(miningSettingsLabel, LV_ALIGN_TOP_LEFT, 0, -16);
-    lv_obj_clear_flag(miningSettingsLabel, LV_OBJ_FLAG_SCROLLABLE);
+    // Screen Settings Label
+    lv_obj_t* screenSettingsLabel = lv_label_create(screenSettingsContainer);
+    lv_label_set_text(screenSettingsLabel, "SCREEN SETTINGS");
+    lv_obj_set_style_text_font(screenSettingsLabel, theme->fontMedium24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(screenSettingsLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align(screenSettingsLabel, LV_ALIGN_TOP_LEFT, 0, -16);
+    lv_obj_clear_flag(screenSettingsLabel, LV_OBJ_FLAG_SCROLLABLE);
 
-    //  Stratum URL Main Text Area
-    lv_obj_t* stratumUrlTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum URL Main");
-    lv_obj_align(stratumUrlTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 16);
-    lv_obj_set_width(stratumUrlTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumUrlTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUrlTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUrlTextAreaMain);
+    // Screen Brightness Slider styles
+    static lv_style_t style_main;
+    static lv_style_t style_indicator;
+    static lv_style_t style_knob;
+    static lv_style_t style_pressed_color;
+    //lv_obj_set_style_bg_color(screenBrightnessSlider, theme->backgroundColor, LV_PART_MAIN);
+    //lv_obj_set_style_bg_opa(screenBrightnessSlider, LV_OPA_80, LV_PART_MAIN);
+    //lv_obj_set_style_border_width(screenBrightnessSlider, 0, LV_PART_MAIN);
+    // main style
+    lv_style_init(&style_main);
+    lv_style_set_bg_opa(&style_main, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_main, theme->backgroundColor);
+    lv_style_set_radius(&style_main, LV_RADIUS_CIRCLE);
+    lv_style_set_pad_ver(&style_main, -2); /*Makes the indicator larger*/
 
-    //Stratum Port Main Text Area
-    lv_obj_t* stratumPortTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum Port Main");
-    lv_obj_align(stratumPortTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 80);
-    lv_obj_set_width(stratumPortTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumPortTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPortTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPortTextAreaMain);
+    // indicator style
+    lv_style_init(&style_indicator);
+    lv_style_set_bg_opa(&style_indicator, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_indicator, theme->primaryColor);
+    lv_style_set_radius(&style_indicator, LV_RADIUS_CIRCLE);
 
-    // Stratum User Main  Text Area
-    lv_obj_t* stratumUserTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum User Main");
-    lv_obj_align(stratumUserTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 144);
-    lv_obj_set_width(stratumUserTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumUserTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUserTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUserTextAreaMain);
+    // knob style
+    lv_style_init(&style_knob);
+    lv_style_set_bg_opa(&style_knob, LV_OPA_COVER);
+    lv_style_set_bg_color(&style_knob, theme->primaryColor);
+    lv_style_set_radius(&style_knob, LV_RADIUS_CIRCLE);
+    lv_style_set_border_color(&style_knob, theme->backgroundColor);
+    lv_style_set_border_width(&style_knob, 2);
+    lv_style_set_radius(&style_knob, LV_RADIUS_CIRCLE);
+    lv_style_set_pad_all(&style_knob, 6);
 
-    // Stratum Password Main Text Area
-    lv_obj_t* stratumPasswordTextAreaMain = setTextAreaStyles(miningSettingsContainer, "Stratum Password Main");
-    lv_obj_align(stratumPasswordTextAreaMain, LV_ALIGN_TOP_LEFT, 0, 208);
-    lv_obj_set_width(stratumPasswordTextAreaMain, lv_pct(45));
-    lv_obj_add_event_cb(stratumPasswordTextAreaMain, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPasswordTextAreaMain, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPasswordTextAreaMain);
 
-    //  Stratum URL Backup Text Area
-    lv_obj_t* stratumUrlTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum URL Fallback");
-    lv_obj_align(stratumUrlTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 16);
-    lv_obj_set_width(stratumUrlTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumUrlTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUrlTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUrlTextAreaFallback);
 
-    //Stratum Port Fallback Text Area
-    lv_obj_t* stratumPortTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum Port Fallback");
-    lv_obj_align(stratumPortTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 80);
-    lv_obj_set_width(stratumPortTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumPortTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPortTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPortTextAreaFallback);
+    // screen brightness label
 
-    // Stratum User Fallback Text Area
-    lv_obj_t* stratumUserTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum User Fallback");
-    lv_obj_align(stratumUserTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 144);
-    lv_obj_set_width(stratumUserTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumUserTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumUserTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumUserTextAreaFallback);
+    if (backlightPWM) {
+            // Create slider
+    lv_obj_t* screenBrightnessSlider = lv_slider_create(screenSettingsContainer);
+    lv_obj_remove_style_all(screenBrightnessSlider);
+    lv_obj_set_size(screenBrightnessSlider, 264, 32);
+    lv_obj_align(screenBrightnessSlider, LV_ALIGN_TOP_LEFT, 16, 32);
+    lv_obj_add_style(screenBrightnessSlider, &style_main, LV_PART_MAIN);
+    lv_obj_add_style(screenBrightnessSlider, &style_indicator, LV_PART_INDICATOR);
+    lv_obj_add_style(screenBrightnessSlider, &style_knob, LV_PART_KNOB);
+        lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
+        lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS");
+        lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
+        lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
+        lv_obj_align_to(screenBrightnessLabel, screenBrightnessSlider, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+        lv_slider_set_value(screenBrightnessSlider, 255, LV_ANIM_OFF);
+        lv_slider_set_range(screenBrightnessSlider, 1, 255);
+        lv_obj_add_event_cb(screenBrightnessSlider, screenBrightnessSliderEventHandler, LV_EVENT_VALUE_CHANGED, NULL);
+    }else{
+        lv_obj_t* screenBrightnessLabel = lv_label_create(screenSettingsContainer);
+        lv_label_set_text(screenBrightnessLabel, "SCREEN BRIGHTNESS NOT AVAILABLE");
+        lv_obj_set_style_text_font(screenBrightnessLabel, theme->fontMedium16, LV_PART_MAIN);
+        lv_obj_set_style_text_color(screenBrightnessLabel, theme->textColor, LV_PART_MAIN);
+        lv_obj_align(screenBrightnessLabel, LV_ALIGN_TOP_LEFT, 16, 32);
+    }
 
-    // Stratum Password Fallback Text Area
-    lv_obj_t* stratumPasswordTextAreaFallback = setTextAreaStyles(miningSettingsContainer, "Stratum Password Fallback");
-    lv_obj_align(stratumPasswordTextAreaFallback, LV_ALIGN_TOP_RIGHT, 0, 208);
-    lv_obj_set_width(stratumPasswordTextAreaFallback, lv_pct(45));
-    lv_obj_add_event_cb(stratumPasswordTextAreaFallback, ta_event_cb, LV_EVENT_ALL, NULL);
-    lv_obj_clear_flag(stratumPasswordTextAreaFallback, LV_OBJ_FLAG_SCROLLABLE);
-    setCursorStyles(stratumPasswordTextAreaFallback);
+
 
     // Asic Settings Container
     lv_obj_t* asicSettingsContainer = lv_obj_create(asicSettingsTab);
-    lv_obj_set_size(asicSettingsContainer, 672, 312);
+        lv_obj_set_size(asicSettingsContainer, 672, 312);
     lv_obj_align(asicSettingsContainer, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_opa(asicSettingsContainer, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_border_opa(asicSettingsContainer, LV_OPA_0, LV_PART_MAIN);
@@ -2297,226 +1489,52 @@ lv_style_set_bg_color(&style_radio_chk, theme->primaryColor);
 lv_style_set_bg_opa(&style_radio_chk, LV_OPA_100);
 
 // Low Power Mode Checkbox
-lowPowerMode = lv_checkbox_create(powerModeContainer);
-lv_checkbox_set_text(lowPowerMode, "LOW POWER MODE | Quiet Fans");
-lv_obj_add_style(lowPowerMode, &style_radio, LV_PART_INDICATOR);
-lv_obj_add_style(lowPowerMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-lv_obj_align(lowPowerMode, LV_ALIGN_TOP_LEFT, 0, 40);  
-lv_obj_set_style_text_font(lowPowerMode, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(lowPowerMode, theme->textColor, LV_PART_MAIN);
-lv_obj_add_event_cb(lowPowerMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+quietMode = lv_checkbox_create(powerModeContainer);
+lv_checkbox_set_text(quietMode, "QUIET MODE | LOWER FAN SPEED");
+lv_obj_add_style(quietMode, &style_radio, LV_PART_INDICATOR);
+lv_obj_add_style(quietMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+lv_obj_align(quietMode, LV_ALIGN_TOP_LEFT, 0, 40);  
+lv_obj_set_style_text_font(quietMode, theme->fontMedium24, LV_PART_MAIN);
+lv_obj_set_style_text_color(quietMode, theme->textColor, LV_PART_MAIN);
+lv_obj_add_event_cb(quietMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
 // Normal Power Mode Checkbox
-normalPowerMode = lv_checkbox_create(powerModeContainer);
-lv_checkbox_set_text(normalPowerMode, "NORMAL POWER MODE | Balanced performance");
-lv_obj_add_style(normalPowerMode, &style_radio, LV_PART_INDICATOR);
-lv_obj_add_style(normalPowerMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-lv_obj_align(normalPowerMode, LV_ALIGN_TOP_LEFT, 0, 120); 
-lv_obj_set_style_text_font(normalPowerMode, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(normalPowerMode, theme->textColor, LV_PART_MAIN);
-lv_obj_add_event_cb(normalPowerMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+balancedMode = lv_checkbox_create(powerModeContainer);
+lv_checkbox_set_text(balancedMode, "BALANCED MODE | BALANCED PERFORMANCE");
+lv_obj_add_style(balancedMode, &style_radio, LV_PART_INDICATOR);
+lv_obj_add_style(balancedMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+lv_obj_align(balancedMode, LV_ALIGN_TOP_LEFT, 0, 120); 
+lv_obj_set_style_text_font(balancedMode, theme->fontMedium24, LV_PART_MAIN);
+lv_obj_set_style_text_color(balancedMode, theme->textColor, LV_PART_MAIN);
+lv_obj_add_event_cb(balancedMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
 // High Power Mode Checkbox
-highPowerMode = lv_checkbox_create(powerModeContainer);
-lv_checkbox_set_text(highPowerMode, "HIGH POWER MODE | Increased Fan Noise");
-lv_obj_add_style(highPowerMode, &style_radio, LV_PART_INDICATOR);
-lv_obj_add_style(highPowerMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
-lv_obj_align(highPowerMode, LV_ALIGN_TOP_LEFT, 0, 200);  // Moved up by 32 (from 200 to 168)
-lv_obj_set_style_text_font(highPowerMode, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(highPowerMode, theme->textColor, LV_PART_MAIN);
-lv_obj_add_event_cb(highPowerMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+turboMode = lv_checkbox_create(powerModeContainer);
+lv_checkbox_set_text(turboMode, "TURBO MODE | MAXIMUM PERFORMANCE");
+lv_obj_add_style(turboMode, &style_radio, LV_PART_INDICATOR);
+lv_obj_add_style(turboMode, &style_radio_chk, LV_PART_INDICATOR | LV_STATE_CHECKED);
+lv_obj_align(turboMode, LV_ALIGN_TOP_LEFT, 0, 200);  // Moved up by 32 (from 200 to 168)
+lv_obj_set_style_text_font(turboMode, theme->fontMedium24, LV_PART_MAIN);
+lv_obj_set_style_text_color(turboMode, theme->textColor, LV_PART_MAIN);
+lv_obj_add_event_cb(turboMode, power_mode_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
-// Set default selection null
-//lv_obj_add_state(normalPowerMode, LV_STATE_CHECKED);
 
+// Read current preset from NVS and set the appropriate checkbox
+char currentPreset[10];
+loadSettingsFromNVSasString(NVS_KEY_ASIC_PRESET_NAME, currentPreset, sizeof(currentPreset));
+
+if (strcmp(currentPreset, "quiet") == 0) {
+    lv_obj_add_state(quietMode, LV_STATE_CHECKED);
+} else if (strcmp(currentPreset, "balanced") == 0) {
+    lv_obj_add_state(balancedMode, LV_STATE_CHECKED);
+} else if (strcmp(currentPreset, "turbo") == 0) {
+    lv_obj_add_state(turboMode, LV_STATE_CHECKED);
+}
 // Group radio buttons together
 lv_group_t* radio_group = lv_group_create();
-lv_group_add_obj(radio_group, lowPowerMode);
-lv_group_add_obj(radio_group, normalPowerMode);
-lv_group_add_obj(radio_group, highPowerMode);
-
-// Autotune Settings Container
-lv_obj_t* autoTuneSettingsContainer = lv_obj_create(autoTuneSettingsTab);
-lv_obj_set_size(autoTuneSettingsContainer, 672, 312);
-lv_obj_align(autoTuneSettingsContainer, LV_ALIGN_CENTER, 0, 0);
-lv_obj_set_style_bg_opa(autoTuneSettingsContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(autoTuneSettingsContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(autoTuneSettingsContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-
-// Target frequency, voltage, and fan speed
-lv_obj_t* targetVoltageContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(targetVoltageContainer, 208, 136);
-lv_obj_align(targetVoltageContainer, LV_ALIGN_TOP_LEFT, 0, 0);
-lv_obj_set_style_bg_opa(targetVoltageContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(targetVoltageContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(targetVoltageContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//targetVoltageLabel
-lv_obj_t* targetVoltageLabel = lv_label_create(targetVoltageContainer);
-lv_label_set_text(targetVoltageLabel, "TARGET VOLT");
-lv_obj_set_style_text_font(targetVoltageLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetVoltageLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetVoltageLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//targetVoltageVariableLabel
-targetVoltageVariableLabel = lv_label_create(targetVoltageContainer);
-lv_label_set_text(targetVoltageVariableLabel, "1250mV");
-lv_obj_set_style_text_font(targetVoltageVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetVoltageVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetVoltageVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-lv_obj_t* targetFrequencyContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(targetFrequencyContainer, 208, 136);
-lv_obj_align(targetFrequencyContainer, LV_ALIGN_TOP_LEFT, 210, 0);
-lv_obj_set_style_bg_opa(targetFrequencyContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(targetFrequencyContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(targetFrequencyContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//targetFrequencyLabel
-lv_obj_t* targetFrequencyLabel = lv_label_create(targetFrequencyContainer);
-lv_label_set_text(targetFrequencyLabel, "TARGET FREQ");
-lv_obj_set_style_text_font(targetFrequencyLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetFrequencyLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetFrequencyLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//targetFrequencyVariableLabel
-targetFrequencyVariableLabel = lv_label_create(targetFrequencyContainer);
-lv_label_set_text(targetFrequencyVariableLabel, "490 MHz");
-lv_obj_set_style_text_font(targetFrequencyVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetFrequencyVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetFrequencyVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-lv_obj_t* targetFanSpeedContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(targetFanSpeedContainer, 208, 136);
-lv_obj_align(targetFanSpeedContainer, LV_ALIGN_TOP_LEFT, 420, 0);
-lv_obj_set_style_bg_opa(targetFanSpeedContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(targetFanSpeedContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(targetFanSpeedContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//targetFanSpeedLabel
-lv_obj_t* targetFanSpeedLabel = lv_label_create(targetFanSpeedContainer);
-lv_label_set_text(targetFanSpeedLabel, "TARGET FAN");
-lv_obj_set_style_text_font(targetFanSpeedLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetFanSpeedLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetFanSpeedLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//targetFanSpeedVariableLabel
-targetFanSpeedVariableLabel = lv_label_create(targetFanSpeedContainer);
-lv_label_set_text(targetFanSpeedVariableLabel, "35%");
-lv_obj_set_style_text_font(targetFanSpeedVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(targetFanSpeedVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(targetFanSpeedVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-
-// current offset
-lv_obj_t* offestVoltageContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(offestVoltageContainer, 208, 136);
-lv_obj_align(offestVoltageContainer, LV_ALIGN_TOP_LEFT, 0, 136);
-lv_obj_set_style_bg_opa(offestVoltageContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(offestVoltageContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(offestVoltageContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//offsetVoltageLabel
-lv_obj_t* offsetVoltageLabel = lv_label_create(offestVoltageContainer);
-lv_label_set_text(offsetVoltageLabel, "OFFSET VOLT");
-lv_obj_set_style_text_font(offsetVoltageLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetVoltageLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetVoltageLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//offsetVoltageVariableLabel
-offsetVoltageVariableLabel = lv_label_create(offestVoltageContainer);
-lv_label_set_text(offsetVoltageVariableLabel, "-120mV");
-lv_obj_set_style_text_font(offsetVoltageVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetVoltageVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetVoltageVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-lv_obj_t* offsetFrequencyContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(offsetFrequencyContainer, 208, 136);
-lv_obj_align(offsetFrequencyContainer, LV_ALIGN_TOP_LEFT, 210, 136);
-lv_obj_set_style_bg_opa(offsetFrequencyContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(offsetFrequencyContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(offsetFrequencyContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//offsetFrequencyLabel
-lv_obj_t* offsetFrequencyLabel = lv_label_create(offsetFrequencyContainer);
-lv_label_set_text(offsetFrequencyLabel, "OFFSET FREQ");
-lv_obj_set_style_text_font(offsetFrequencyLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetFrequencyLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetFrequencyLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//offsetFrequencyVariableLabel
-offsetFrequencyVariableLabel = lv_label_create(offsetFrequencyContainer);
-lv_label_set_text(offsetFrequencyVariableLabel, "-20 MHz");
-lv_obj_set_style_text_font(offsetFrequencyVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetFrequencyVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetFrequencyVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-lv_obj_t* offsetFanSpeedContainer = lv_obj_create(autoTuneSettingsContainer);
-lv_obj_set_size(offsetFanSpeedContainer, 208, 136);
-lv_obj_align(offsetFanSpeedContainer, LV_ALIGN_TOP_LEFT, 420, 136);
-lv_obj_set_style_bg_opa(offsetFanSpeedContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_set_style_border_opa(offsetFanSpeedContainer, LV_OPA_0, LV_PART_MAIN);
-lv_obj_clear_flag(offsetFanSpeedContainer, LV_OBJ_FLAG_SCROLLABLE);
-
-//offsetFanSpeedLabel
-lv_obj_t* offsetFanSpeedLabel = lv_label_create(offsetFanSpeedContainer);
-lv_label_set_text(offsetFanSpeedLabel, "OFFSET FAN");
-lv_obj_set_style_text_font(offsetFanSpeedLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetFanSpeedLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetFanSpeedLabel, LV_ALIGN_TOP_MID, 0, -16); 
-
-//offsetFanSpeedVariableLabel
-offsetFanSpeedVariableLabel = lv_label_create(offsetFanSpeedContainer);
-lv_label_set_text(offsetFanSpeedVariableLabel, "3%");
-lv_obj_set_style_text_font(offsetFanSpeedVariableLabel, theme->fontMedium24, LV_PART_MAIN);
-lv_obj_set_style_text_color(offsetFanSpeedVariableLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_align(offsetFanSpeedVariableLabel, LV_ALIGN_TOP_MID, 0, 16); 
-
-// Create switch
-lv_obj_t* autotuneSwitch = lv_switch_create(autoTuneSettingsContainer);
-lv_obj_set_size(autotuneSwitch, 80, 40);  // Set width=60px, height=32px
-lv_obj_align(autotuneSwitch, LV_ALIGN_BOTTOM_RIGHT, -16, 16);
-
-// Create label for the switch
-autotuneSwitchLabel = lv_label_create(autoTuneSettingsContainer);
-lv_obj_align_to(autotuneSwitchLabel, autotuneSwitch, LV_ALIGN_OUT_LEFT_MID, -64, -17);
-
-// Apply theme styling to label
-lv_obj_set_style_text_color(autotuneSwitchLabel, theme->textColor, LV_PART_MAIN);
-lv_obj_set_style_text_font(autotuneSwitchLabel, theme->fontMedium16, LV_PART_MAIN);
-
-// Apply theme styling to switch
-lv_obj_set_style_bg_color(autotuneSwitch, theme->primaryColor, LV_PART_INDICATOR | LV_STATE_CHECKED);
-lv_obj_set_style_bg_color(autotuneSwitch, theme->backgroundColor, LV_PART_MAIN);
-lv_obj_set_style_border_color(autotuneSwitch, theme->borderColor, LV_PART_MAIN);
-lv_obj_set_style_border_width(autotuneSwitch, 2, LV_PART_MAIN);
-
-// Set initial switch state based on autoTuneEnabled flag
-lv_obj_add_state(autotuneSwitch, autoTuneEnabled ? LV_STATE_CHECKED : 0);
-
-// Set label text based on autoTuneEnabled flag
-if(autoTuneEnabled) {
-    lv_label_set_text(autotuneSwitchLabel, "Autotune\nEnabled");
-} else {
-    lv_label_set_text(autotuneSwitchLabel, "Autotune\nDisabled");
-}
-
-lv_obj_add_event_cb(autotuneSwitch, autotuneSwitchEventHandler, LV_EVENT_ALL, NULL);
-lv_obj_add_flag(autotuneSwitch, LV_OBJ_FLAG_EVENT_BUBBLE);
-
-
-static lv_obj_t* autoTuneLabels[6];  // Array to hold all autotune labels
-autoTuneLabels[0] = targetVoltageVariableLabel;
-autoTuneLabels[1] = targetFrequencyVariableLabel;
-autoTuneLabels[2] = targetFanSpeedVariableLabel;
-autoTuneLabels[3] = offsetVoltageVariableLabel;
-autoTuneLabels[4] = offsetFrequencyVariableLabel;
-autoTuneLabels[5] = offsetFanSpeedVariableLabel;
-
-// Create timer for autotune settings updates
-screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, autoTuneLabels);
-
+lv_group_add_obj(radio_group, quietMode);
+lv_group_add_obj(radio_group, balancedMode);
+lv_group_add_obj(radio_group, turboMode);
 
     // Theme Settings Container
     lv_obj_t* themeSettingsContainer = lv_obj_create(themeSettingsTab);
@@ -2560,24 +1578,21 @@ screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, a
     lv_obj_set_style_text_color(themeDropdown, theme->backgroundColor, LV_PART_SELECTED);
 
     lv_dropdown_set_options(themeDropdown, "ACS DEFAULT\nBITAXE RED");
-    #if (BlockStreamJade == 1)
-    lv_dropdown_add_option(themeDropdown, "BLOCKSTREAM JADE\nBLOCKSTREAM BLUE", LV_DROPDOWN_POS_LAST);
-    #endif
-    #if (SoloSatoshi == 1)
-    lv_dropdown_add_option(themeDropdown, "SOLO SATOSHI", LV_DROPDOWN_POS_LAST);
-    #endif
-    #if (ALTAIR == 1)
-    lv_dropdown_add_option(themeDropdown, "ALTAIR", LV_DROPDOWN_POS_LAST);
-    #endif
-    #if (SoloMiningCo == 1)
-    lv_dropdown_add_option(themeDropdown, "SOLO MINING CO", LV_DROPDOWN_POS_LAST);
-    #endif
-    #if (BTCMagazine == 1)
-    lv_dropdown_add_option(themeDropdown, "BTCMAGAZINE", LV_DROPDOWN_POS_LAST);
-    #endif
-    #if (VoskCoin == 1)
-    lv_dropdown_add_option(themeDropdown, "VOSKCOIN", LV_DROPDOWN_POS_LAST);
-    #endif
+    
+    // Only add themes that are available
+    if (isThemeAvailable(THEME_BLOCKSTREAM_JADE)) {
+        lv_dropdown_add_option(themeDropdown, "BLOCKSTREAM JADE", LV_DROPDOWN_POS_LAST);
+    }
+    if (isThemeAvailable(THEME_BLOCKSTREAM_BLUE)) {
+        lv_dropdown_add_option(themeDropdown, "BLOCKSTREAM BLUE", LV_DROPDOWN_POS_LAST);
+    }
+    if (isThemeAvailable(THEME_SOLO_SATOSHI)) {
+        lv_dropdown_add_option(themeDropdown, "SOLO SATOSHI", LV_DROPDOWN_POS_LAST);
+    }
+    if (isThemeAvailable(THEME_SOLO_MINING_CO)) {
+        lv_dropdown_add_option(themeDropdown, "SOLO MINING CO", LV_DROPDOWN_POS_LAST);
+    }
+
     // Add spacing at the end of the list to make last option selectable
     lv_dropdown_add_option(themeDropdown, "", LV_DROPDOWN_POS_LAST);
 
@@ -2613,7 +1628,7 @@ screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, a
 
     // Time Settings Container
     timeSettingsContainer = lv_obj_create(timeSettingsTab);
-    lv_obj_set_size(timeSettingsContainer, 672, 320);
+    lv_obj_set_size(timeSettingsContainer, 672, 312);
     lv_obj_align(timeSettingsContainer, LV_ALIGN_TOP_LEFT, 0, -16);  
     lv_obj_set_style_bg_opa(timeSettingsContainer, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_border_opa(timeSettingsContainer, LV_OPA_0, LV_PART_MAIN);
@@ -2735,38 +1750,34 @@ screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, a
     lv_obj_set_style_bg_opa(otaQRCodeContainer, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_border_opa(otaQRCodeContainer, LV_OPA_0, LV_PART_MAIN);
     lv_obj_clear_flag(otaQRCodeContainer, LV_OBJ_FLAG_SCROLLABLE);
-    // URL String
-    char urlString[100];
-    String ipString = WiFi.localIP().toString();
-    snprintf(urlString, sizeof(urlString), "http://%s/ota", ipString.c_str());
+
 
     // OTA QR Code
-    lv_obj_t* otaQRCode = lv_qrcode_create(otaQRCodeContainer, 128, theme->primaryColor, theme->backgroundColor);
+    lv_obj_t* LCDotaQRCode = lv_qrcode_create(otaQRCodeContainer, 128, lv_color_hex(0xffffff), theme->backgroundColor);
     if (WiFi.status() == WL_CONNECTED) 
     {
-        lv_qrcode_update(otaQRCode, urlString, strlen(urlString));
+        lv_qrcode_update(LCDotaQRCode, urlString, strlen(urlString));
     }
-    lv_obj_align(otaQRCode, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_obj_align(LCDotaQRCode, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 
     // OTA Address Label
-    char otaAddressLabelText[100];
-    snprintf(otaAddressLabelText, sizeof(otaAddressLabelText), "Firmware Update:\n%s/ota", ipString.c_str());
-    lv_obj_t* otaAddressLabel = lv_label_create(otaQRCodeContainer);
+    snprintf(LCDotaAddressLabelText, sizeof(LCDotaAddressLabelText), "Firmware Update:\n%s/ota", ipString.c_str());
+    LCDotaAddressLabel = lv_label_create(otaQRCodeContainer);
     if (WiFi.status() == WL_CONNECTED) {
-        lv_label_set_text(otaAddressLabel, otaAddressLabelText);
+        lv_label_set_text(LCDotaAddressLabel, LCDotaAddressLabelText);
     }
     else {
-        lv_label_set_text(otaAddressLabel, "Firmware Update:\nConnect to WiFi");
+        lv_label_set_text(LCDotaAddressLabel, "Firmware Update:\nConnect to WiFi");
     }
-    lv_obj_set_style_text_font(otaAddressLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(otaAddressLabel, theme->textColor, LV_PART_MAIN);
-    lv_obj_align(otaAddressLabel, LV_ALIGN_TOP_LEFT, 0, 8);
-    lv_obj_clear_flag(otaAddressLabel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_text_align(otaAddressLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(LCDotaAddressLabel, theme->fontMedium16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(LCDotaAddressLabel,lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_align(LCDotaAddressLabel, LV_ALIGN_TOP_LEFT, 0, 8);
+    lv_obj_clear_flag(LCDotaAddressLabel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_text_align(LCDotaAddressLabel, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
 
     // Version Label
     char versionLabelText[100];
-    snprintf(versionLabelText, sizeof(versionLabelText), "Version: %d.%d.%d %s %s\nVersion Date: %s", MajorVersion, MinorVersion, PatchVersion, VersionNote, ModelType, BuildDate);
+    snprintf(versionLabelText, sizeof(versionLabelText), "Version: %d.%d.%d %s\nVersion Date: %s", MajorVersion, MinorVersion, PatchVersion, VersionNote, BuildDate);
     lv_obj_t* versionLabel = lv_label_create(saveTabContainer);
     lv_label_set_text(versionLabel, versionLabelText);
     lv_obj_set_style_text_font(versionLabel, theme->fontMedium16, LV_PART_MAIN);
@@ -2834,24 +1845,8 @@ screenObjs.autoTuneSettingsTimer = lv_timer_create(updateAutoTuneLabels, 1000, a
         lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLL_CHAIN);
         lv_obj_clear_flag(kb, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
-        lv_keyboard_set_textarea(kb, stratumUrlTextAreaMain);
+        //lv_keyboard_set_textarea(kb, stratumUrlTextAreaMain);
         lv_obj_add_flag(kb, LV_OBJ_FLAG_HIDDEN);
-
-
-        // Store text area references as we create them
-        //settingsTextAreas.hostnameTextArea = hostnameTextArea;
-        //settingsTextAreas.wifiTextArea = wifiTextArea;
-        //settingsTextAreas.wifiPasswordTextArea = wifiPasswordTextArea;
-        settingsTextAreas.stratumUrlTextArea = stratumUrlTextAreaMain;
-        settingsTextAreas.stratumPortTextArea = stratumPortTextAreaMain;
-        settingsTextAreas.stratumUserTextArea = stratumUserTextAreaMain;
-        settingsTextAreas.stratumPasswordTextArea = stratumPasswordTextAreaMain;
-        settingsTextAreas.stratumUrlTextAreaFallback = stratumUrlTextAreaFallback;
-        settingsTextAreas.stratumPortTextAreaFallback = stratumPortTextAreaFallback;
-        settingsTextAreas.stratumUserTextAreaFallback = stratumUserTextAreaFallback;
-        settingsTextAreas.stratumPasswordTextAreaFallback = stratumPasswordTextAreaFallback;
-        //settingsTextAreas.asicFrequencyTextArea = asicFrequencyTextArea;
-       // settingsTextAreas.asicVoltageTextArea = asicVoltageTextArea;
 
         // Create save button
         
@@ -2953,8 +1948,8 @@ void showOverheatOverlay()
         
         // Create confirmation container
         lv_obj_t* confirmContainer = lv_obj_create(overheatOverlay);
-        lv_obj_set_size(confirmContainer, 672, 392);
-        lv_obj_align(confirmContainer, LV_ALIGN_CENTER, 40, 28);
+        lv_obj_set_size(confirmContainer, LV_HOR_RES, LV_VER_RES);
+        lv_obj_align(confirmContainer, LV_ALIGN_CENTER, 0, 0);
         lv_obj_set_style_bg_color(confirmContainer, theme->backgroundColor, LV_PART_MAIN);
         lv_obj_set_style_border_color(confirmContainer, theme->borderColor, LV_PART_MAIN);
         lv_obj_set_style_border_width(confirmContainer, 2, LV_PART_MAIN);
@@ -2968,39 +1963,6 @@ void showOverheatOverlay()
         lv_obj_set_style_text_align(message, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
         lv_obj_set_style_text_color(message, theme->textColor, LV_PART_MAIN);
         lv_obj_align(message, LV_ALIGN_TOP_MID, 0, 16);
-
-         // not needed when mode is already known
-         #if (BitaxeUltra == 0 && BitaxeSupra == 0 && BitaxeGamma == 0)
-        lv_obj_t* modelDropdown = lv_dropdown_create(confirmContainer);
-        //lv_obj_remove_style_all(modelDropdown);
-        lv_obj_set_size(modelDropdown, 200, 48);
-
-        lv_obj_align(modelDropdown, LV_ALIGN_CENTER, 0, 48);
-        lv_obj_set_style_text_align(modelDropdown, LV_TEXT_ALIGN_CENTER, LV_PART_SELECTED);
-        
-        lv_obj_set_style_bg_color(modelDropdown, theme->backgroundColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(modelDropdown, theme->borderColor, LV_PART_MAIN);
-        lv_obj_set_style_text_color(modelDropdown, theme->textColor, LV_PART_MAIN);
-        lv_obj_set_style_text_font(modelDropdown, theme->fontMedium16, LV_PART_MAIN);
-        lv_obj_set_style_text_font(modelDropdown, LV_FONT_DEFAULT, LV_PART_INDICATOR);
-        lv_obj_set_style_border_width(modelDropdown, 2, LV_PART_MAIN);
-        lv_obj_set_style_radius(modelDropdown, 16, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(modelDropdown, theme->primaryColor, LV_PART_SELECTED);
-        lv_obj_set_style_text_color(modelDropdown, theme->backgroundColor, LV_PART_SELECTED);
-
-        lv_dropdown_set_options(modelDropdown, "Bitaxe Ultra\nBitaxe Supra\nBitaxe Gama");
-
-        // style list
-        lv_obj_t* modelDropdownList = lv_dropdown_get_list(modelDropdown);
-        lv_obj_set_style_bg_color(modelDropdownList, theme->backgroundColor, LV_PART_MAIN);
-        lv_obj_set_style_border_color(modelDropdownList, theme->borderColor, LV_PART_MAIN );
-        lv_obj_set_style_text_color(modelDropdownList, theme->textColor, LV_PART_MAIN);
-        lv_obj_set_style_text_font(modelDropdownList, theme->fontMedium16, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(modelDropdownList, theme->primaryColor, LV_PART_SELECTED);
-        lv_obj_set_style_bg_color(modelDropdownList, theme->primaryColor, LV_STATE_CHECKED);
-        lv_obj_set_style_bg_color(modelDropdownList, theme->primaryColor, LV_PART_SELECTED | LV_STATE_CHECKED);
-        lv_obj_set_style_text_color(modelDropdownList, theme->backgroundColor, LV_PART_SELECTED | LV_STATE_CHECKED);
-        #endif
 
         // Create save button
         lv_obj_t* saveButton = lv_btn_create(confirmContainer);
@@ -3041,16 +2003,7 @@ static void resetAsicSettingsButtonEventHandler(lv_event_t* e) {
     lv_obj_t* btn = lv_event_get_target(e);
     uiTheme_t* theme = getCurrentTheme();
     if(code == LV_EVENT_CLICKED) {
-        #if (BitaxeUltra == 0 && BitaxeSupra == 0 && BitaxeGamma == 0)
-        // Get the dropdown object
-        lv_obj_t* dropdown = lv_obj_get_parent(btn);  // Get parent container
-        dropdown = lv_obj_get_child(dropdown, 1);     // Get the dropdown (adjust index if needed)
-        // Get selected option
-        char modelBuffer[32];
-        lv_dropdown_get_selected_str(dropdown, modelBuffer, sizeof(modelBuffer));
-        
-        Serial.printf("Selected model: %s\n", modelBuffer);
-        #endif
+       
         lvgl_port_lock(-1);
         // Create popup message
         lv_obj_t* popup = lv_obj_create(lv_scr_act());
@@ -3085,73 +2038,14 @@ static void resetAsicSettingsButtonEventHandler(lv_event_t* e) {
             writeDataToBAP(&specialRegisters.overheatMode, 1, LVGL_FLAG_OVERHEAT_MODE);
             delay(5000);
         }
-        #if (BitaxeUltra == 0 && BitaxeSupra == 0 && BitaxeGamma == 0)
-        // send data to BAP Voltage first then Frequency
-        if (strcmp(modelBuffer, "Bitaxe Gama") == 0)
-        {
-            uint8_t voltBytes[2] = {    
-                (uint8_t)(1050 >> 8),    // High byte for 1050mV
-                (uint8_t)(1050 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(voltBytes, 2, BAP_ASIC_VOLTAGE_BUFFER_REG);
-            delay(5000);
-            uint8_t freqBytes[2] = {
-                (uint8_t)(420 >> 8),    // High byte for 450MHz
-                (uint8_t)(420 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(freqBytes, 2, BAP_ASIC_FREQ_BUFFER_REG);
-            delay(1000);
+       
 
-        }
-        else if (strcmp(modelBuffer, "Bitaxe Supra") == 0)
-        {
-            uint8_t voltBytes[2] = {
-                (uint8_t)(1150 >> 8),    // High byte for 1150mV
-                (uint8_t)(1150 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(voltBytes, 2, BAP_ASIC_VOLTAGE_BUFFER_REG);
-            delay(5000);
-            uint8_t freqBytes[2] = {
-                (uint8_t)(450 >> 8),    // High byte for 450MHz
-                (uint8_t)(450 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(freqBytes, 2, BAP_ASIC_FREQ_BUFFER_REG);
-            delay(1000);
-
-        }
-        else if (strcmp(modelBuffer, "Bitaxe Ultra") == 0)
-        {
-            uint8_t voltBytes[2] = {
-                (uint8_t)(1150 >> 8),    // High byte for 1150mV
-                (uint8_t)(1150 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(voltBytes, 2, BAP_ASIC_VOLTAGE_BUFFER_REG);
-            delay(5000);
-            uint8_t freqBytes[2] = {
-                (uint8_t)(450 >> 8),    // High byte for 450MHz
-                (uint8_t)(450 & 0xFF)   // Low byte
-            };
-            writeDataToBAP(freqBytes, 2, BAP_ASIC_FREQ_BUFFER_REG);
-            delay(1000);
-
-        }
-        #else
         {
             // send data to BAP Voltage first then Frequency
-            setNormalPowerPreset();
-            uint8_t autotuneEnabledSave = autoTuneEnabled;
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_AUTOTUNE_ENABLED, autotuneEnabledSave);
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_VOLTAGE, (uint16_t)((BAPAsicVoltageBuffer[0] << 8) | BAPAsicVoltageBuffer[1]));
-            writeDataToBAP(BAPAsicVoltageBuffer, 2, BAP_ASIC_VOLTAGE_BUFFER_REG);
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_FREQ, (uint16_t)((BAPAsicFreqBuffer[0] << 8) | BAPAsicFreqBuffer[1]));
-            writeDataToBAP(BAPAsicFreqBuffer, 2, BAP_ASIC_FREQ_BUFFER_REG);
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_FAN_SPEED, (uint16_t)((BAPFanSpeedBuffer[0] << 8) | BAPFanSpeedBuffer[1]));
-            writeDataToBAP(BAPFanSpeedBuffer, 2, BAP_FAN_SPEED_BUFFER_REG);
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_AUTO_FAN_SPEED, (uint16_t)((BAPAutoFanSpeedBuffer[0] << 8) | BAPAutoFanSpeedBuffer[1]));
-            writeDataToBAP(BAPAutoFanSpeedBuffer, 2, BAP_AUTO_FAN_SPEED_BUFFER_REG);
+            setBalancedPreset();
+
 
         }
-        #endif
 
 
 
@@ -3363,61 +2257,48 @@ static void themeDropdownEventHandler(lv_event_t* e) {
         
         lvgl_port_lock(-1);
         
-        if (strcmp(themeBuffer, "BLOCKSTREAM JADE") == 0) {
-            #if (BlockStreamJade == 1)
-            initializeTheme(THEME_BLOCKSTREAM_JADE);
-            #endif
+        themePreset_t selectedTheme = THEME_ACS_DEFAULT;
+        
+        if (strcmp(themeBuffer, "ACS DEFAULT") == 0) {
+            selectedTheme = THEME_ACS_DEFAULT;
+        }
+        else if (strcmp(themeBuffer, "BITAXE RED") == 0) {
+            selectedTheme = THEME_BITAXE_RED;
+        }
+        else if (strcmp(themeBuffer, "BLOCKSTREAM JADE") == 0) {
+            selectedTheme = THEME_BLOCKSTREAM_JADE;
         }
         else if (strcmp(themeBuffer, "BLOCKSTREAM BLUE") == 0) {
-            #if (BlockStreamJade == 1)
-            initializeTheme(THEME_BLOCKSTREAM_BLUE);
-            #endif
-        }
-        
-        else if (strcmp(themeBuffer, "BITAXE RED") == 0) {
-            initializeTheme(THEME_BITAXE_RED);
-        }
-        else if (strcmp(themeBuffer, "ACS DEFAULT") == 0) {
-            initializeTheme(THEME_DEFAULT);
+            selectedTheme = THEME_BLOCKSTREAM_BLUE;
         }
         else if (strcmp(themeBuffer, "SOLO SATOSHI") == 0) {
-            #if (SoloSatoshi == 1)
-            initializeTheme(THEME_SOLO_SATOSHI);
-            #endif
-        }
-        else if (strcmp(themeBuffer, "ALTAIR") == 0) {
-            #if (ALTAIR == 1)
-            initializeTheme(THEME_ALTAIR);
-            #endif
+            selectedTheme = THEME_SOLO_SATOSHI;
         }
         else if (strcmp(themeBuffer, "SOLO MINING CO") == 0) {
-            #if (SoloMiningCo == 1)
-            initializeTheme(THEME_SOLO_MINING_CO);
-            #endif
-        }
-        else if (strcmp(themeBuffer, "BTCMAGAZINE") == 0) {
-            #if (BTCMagazine == 1)
-            initializeTheme(THEME_BTCMAGAZINE);
-            #endif
-        }
-        else if (strcmp(themeBuffer, "VOSKCOIN") == 0) {
-            #if (VoskCoin == 1)
-            initializeTheme(THEME_VOSKCOIN);
-            #endif
+            selectedTheme = THEME_SOLO_MINING_CO;
         }
 
-
-        uiTheme_t* theme = getCurrentTheme();
-        if (theme) {
-            // Set theme container style
-            lv_obj_set_style_border_color(themeExampleContainer, theme->borderColor, LV_PART_MAIN);
-            lv_obj_set_style_text_font(themePreviewLabel, theme->fontMedium24, LV_PART_MAIN);
-            lv_obj_set_style_text_color(themePreviewLabel, theme->textColor, LV_PART_MAIN);
+        // Only initialize theme if it's available
+        if (isThemeAvailable(selectedTheme)) {
+            initializeTheme(selectedTheme);
             
-            // Update preview image
-            lv_img_set_src(themeExampleImage, theme->themePreview);
-            Serial0.println("Theme Preview Updated");
-            Serial0.println(theme->themePreview);
+            uiTheme_t* theme = getCurrentTheme();
+            if (theme) {
+                // Set theme container style
+                lv_obj_set_style_border_color(themeExampleContainer, theme->borderColor, LV_PART_MAIN);
+                lv_obj_set_style_text_font(themePreviewLabel, theme->fontMedium24, LV_PART_MAIN);
+                lv_obj_set_style_text_color(themePreviewLabel, theme->textColor, LV_PART_MAIN);
+                
+                // Update preview image
+                lv_img_set_src(themeExampleImage, theme->themePreview);
+                Serial0.println("Theme Preview Updated");
+                Serial0.println(theme->themePreview);
+            }
+        } else {
+            // If theme is not available, revert to default
+            initializeTheme(THEME_ACS_DEFAULT);
+            // Reset dropdown to default theme
+            lv_dropdown_set_selected(themeDropdown, 0);
         }
         
         lvgl_port_unlock();
@@ -3615,8 +2496,8 @@ void showBlockFoundOverlay() {
         
         // Create confirmation container
         lv_obj_t* confirmContainer = lv_obj_create(blockFoundOverlay);
-        lv_obj_set_size(confirmContainer, 672, 392);
-        lv_obj_align(confirmContainer, LV_ALIGN_CENTER, 40, 28);
+        lv_obj_set_size(confirmContainer, LV_HOR_RES, LV_VER_RES);
+        lv_obj_align(confirmContainer, LV_ALIGN_CENTER, 0,0);
         lv_obj_set_style_bg_color(confirmContainer, theme->backgroundColor, LV_PART_MAIN);
         lv_obj_set_style_border_color(confirmContainer, theme->borderColor, LV_PART_MAIN);
         lv_obj_set_style_border_width(confirmContainer, 2, LV_PART_MAIN);
@@ -3711,4 +2592,87 @@ static void dismissBlockFoundButtonEventHandler(lv_event_t* e) {
     // Toggle Overheat mode
     specialRegisters.foundBlock = 0;
     ESP_LOGI("Block Found", "Block Found Screen Dismissed");
+}
+
+// Graph container framework
+void graphContainer(lv_obj_t* parentMainContainer, lv_obj_t*& container)
+{
+    uiTheme_t* theme = getCurrentTheme();
+    
+    // Create container with parent - using updated container size pattern
+    container = lv_obj_create(parentMainContainer);
+    
+    // Container size matching modern style (632x352 with proper padding)
+    lv_obj_set_size(container, 632, 352);
+    lv_obj_align(container, LV_ALIGN_CENTER, 0, 0);
+    
+    // Style the container
+    lv_obj_set_style_bg_opa(container, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_width(container, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(container, theme->borderColor, LV_PART_MAIN);
+    lv_obj_clear_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // Make it clickable for cycling through graphs
+    lv_obj_add_flag(container, LV_OBJ_FLAG_CLICKABLE);
+}
+
+void graphContainerContent(lv_obj_t* container, const char* title, const char* currentValue, const char* bottomLeftLabel, const char* bottomRightLabel)
+{
+    uiTheme_t* theme = getCurrentTheme();
+    
+    // Title Label (top left)
+    lv_obj_t* titleLabel = lv_label_create(container);
+    lv_label_set_text(titleLabel, title);
+    lv_obj_set_style_text_font(titleLabel, theme->fontMedium24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(titleLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align(titleLabel, LV_ALIGN_TOP_LEFT, 16, 16);
+
+    // Current Value Label (top right of title)
+    lv_obj_t* valueLabel = lv_label_create(container);
+    lv_label_set_text(valueLabel, currentValue);
+    lv_obj_set_style_text_font(valueLabel, theme->fontMedium24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(valueLabel, theme->textColor, LV_PART_MAIN);
+    lv_obj_align_to(valueLabel, titleLabel, LV_ALIGN_OUT_RIGHT_MID, 16, 0);
+
+    // Create the chart
+    lv_obj_t* chart = lv_chart_create(container);
+    lv_obj_set_size(chart, 600, 248);
+    lv_obj_align(chart, LV_ALIGN_CENTER, 32, 16);
+    lv_obj_set_style_bg_opa(chart, LV_OPA_0, LV_PART_MAIN);
+    lv_obj_set_style_border_side(chart, LV_BORDER_SIDE_BOTTOM, LV_PART_MAIN);
+    lv_obj_set_style_border_width(chart, 4, LV_PART_MAIN);
+    lv_obj_set_style_border_color(chart, theme->borderColor, LV_PART_MAIN);
+    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+    
+    // Chart styling
+    lv_obj_set_style_line_width(chart, 4, LV_PART_ITEMS);
+    lv_obj_set_style_size(chart, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_line_opa(chart, LV_OPA_TRANSP, LV_PART_MAIN);
+    
+    lv_chart_set_point_count(chart, 50);
+    lv_chart_series_t* series = lv_chart_add_series(chart, theme->primaryColor, LV_CHART_AXIS_PRIMARY_Y);
+
+    // Configure axis ticks with proper draw size
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 5, 5, 6, 4, true, 50);  // Increased draw_size to 40
+    lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(chart, LV_OBJ_FLAG_CLICKABLE);
+
+    // Bottom Left Label
+    lv_obj_t* bottomLeft = lv_label_create(container);
+    lv_label_set_text(bottomLeft, bottomLeftLabel);
+    lv_obj_set_style_text_font(bottomLeft, theme->fontMedium16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(bottomLeft, theme->textColor, LV_PART_MAIN);
+    lv_obj_set_width(bottomLeft, 280);
+    lv_label_set_long_mode(bottomLeft, LV_LABEL_LONG_CLIP);
+    lv_obj_align(bottomLeft, LV_ALIGN_BOTTOM_LEFT, 16, 16);
+
+    // Bottom Right Label
+    lv_obj_t* bottomRight = lv_label_create(container);
+    lv_label_set_text(bottomRight, bottomRightLabel);
+    lv_obj_set_style_text_font(bottomRight, theme->fontMedium16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(bottomRight, theme->textColor, LV_PART_MAIN);
+    lv_obj_set_width(bottomRight, 280);
+    lv_label_set_long_mode(bottomRight, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(bottomRight, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    lv_obj_align(bottomRight, LV_ALIGN_BOTTOM_RIGHT, -16, 16);
 }

@@ -1,8 +1,11 @@
 #include "BAP.h"
 #include "modelConfig.h"
-#if BAPPORT == 1
+#include "UIScreens.h"
+#include "modelPresets.h"
+#include "NVS.h"
 
 uint8_t* BAPReadBuffer = nullptr;
+uint8_t* BAPWriteBuffer = nullptr;
 uint8_t* BAPHostnameBuffer = nullptr;
 uint8_t* BAPWifiSSIDBuffer = nullptr;
 uint8_t* BAPWifiPassBuffer = nullptr;
@@ -30,9 +33,82 @@ bool confirmedFoundBlock = false;
 
 #define __min(a,b) ((a)<(b)?(a):(b))
 
+// CRC Buffers
+static uint8_t CRCTXBuffer[2];
+static uint8_t CRCRXBuffer[2];
+
+/// @brief waits for a serial response to Match CRC
+/// @param expectedCRC the expected crc 
+/// @param timeout_ms number of ms to wait before timing out
+/// @return true if CRC matches, false otherwise
+static bool CRCRxCheck(uint16_t expectedCRC, uint16_t timeout_ms)
+{
+    // Clear any pending data in the read buffer first
+    while (Serial2.available()) {
+        Serial2.read();
+    }
+
+    memset(CRCRXBuffer, 0, 2);
+    uint32_t startTime = millis();
+    uint8_t bytesRead = 0;
+    
+    // Read exactly 2 bytes for the CRC response
+    while (bytesRead < 2 && (millis() - startTime < timeout_ms)) {
+        if (Serial2.available() > 0) {
+            CRCRXBuffer[bytesRead] = Serial2.read();
+            ESP_LOGI("BAP", "Read CRC byte %d: 0x%02X", bytesRead, CRCRXBuffer[bytesRead]);
+            bytesRead++;
+        }
+        yield();
+        delay(5);  // Add a small delay to give more time between reads
+    }
+    
+    // Verify we got exactly 2 bytes
+    if (bytesRead != 2) {
+        ESP_LOGE("BAP", "Failed to read CRC from device after %d ms. Got %d bytes", timeout_ms, bytesRead);
+        return false;
+    }
+    
+    // Construct the received CRC (high byte first)
+    uint16_t receivedCRC = (CRCRXBuffer[0] << 8) | CRCRXBuffer[1];
+    
+    // Log both CRCs for comparison
+    ESP_LOGI("BAP", "CRC check - Expected: 0x%04X, Received: 0x%04X", expectedCRC, receivedCRC);
+    
+    if (receivedCRC == expectedCRC) {
+        ESP_LOGI("BAP", "CRC match confirmed");
+        return true;
+    }
+    
+    ESP_LOGE("BAP", "CRC mismatch: expected 0x%04X, received 0x%04X", expectedCRC, receivedCRC);
+    return false;
+}
+
+/// @brief Calculates the CRC16 of a given data
+/// @param data The data to calculate the CRC16 of
+/// @param length The length of the data
+/// @return The CRC16 of the data
+static uint16_t calculateCRC16(const uint8_t* data, size_t length) {
+    uint16_t crc = 0xFFFF;  // Initial value
+    
+    for (size_t i = 0; i < length; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (int j = 0; j < 8; j++) {
+            if (crc & 0x8000) {
+                crc = (crc << 1) ^ 0x1021;
+            } else {
+                crc = crc << 1;
+            }
+        }
+    }
+    
+    return crc;
+}
+
 void initializeBAPBuffers()
 {
     BAPReadBuffer = (uint8_t*)malloc(BAPReadBufferLength);
+    BAPWriteBuffer = (uint8_t*)malloc(BAPWriteBufferLength);
     BAPHostnameBuffer = (uint8_t*)malloc(BAP_HOSTNAME_BUFFER_SIZE);
     BAPWifiSSIDBuffer = (uint8_t*)malloc(BAP_WIFI_SSID_BUFFER_SIZE);
     BAPWifiPassBuffer = (uint8_t*)malloc(BAP_WIFI_PASS_BUFFER_SIZE);
@@ -69,244 +145,199 @@ void setupBAP()
     ESP_LOGI("BAP", "BAP Setup Complete - RX: %d, TX: %d", BAP_RX, BAP_TX);
 }
 
-void readDataFromBAP()
-{
-    // Check if there's actually data available
+void processMessage(uint8_t* message, uint8_t dataLen, uint8_t reg) {
+    // Group registers into ranges for switch cases
+    switch(reg) {
+        // Network Data (0x21-0x26)
+        case 0x21 ... 0x26:
+            handleNetworkDataSerial(message, dataLen);
+            break;
+            
+        // Mining Data (0x30-0x35)
+        case 0x30 ... 0x35:
+            handleMiningDataSerial(message, dataLen);
+            break;
+            
+        // Monitoring Data (0x40-0x46)
+        case 0x40 ... 0x46:
+            handleMonitoringDataSerial(message, dataLen);
+            break;
+            
+        // Device Status (0x50-0x54)
+        case 0x50 ... 0x54:
+            handleDeviceStatusSerial(message, dataLen);
+            break;
+            
+        // API Data (0x60-0x6C)
+        case 0x60 ... 0x6C:
+            handleAPIDataSerial(message, dataLen);
+            break;
+
+        // Device Info Data (0x70-0x74)
+        case 0x70 ... 0x74:
+            handleDeviceStatusSerial(message, dataLen);
+            break;
+            
+        // Flags Data (0xE0-0xEF)
+        case 0xE0 ... 0xEF:
+            handleFlagsDataSerial(message, dataLen);
+            break;
+            
+        // Special Registers (0xF0-0xFF)
+        case 0xF0 ... 0xFF:
+            handleSpecialRegistersSerial(message, dataLen);
+            break;
+            
+        default:
+            ESP_LOGW("BAP", "Unknown register 0x%02X", reg);
+            break;
+    }
+}
+
+
+void readDataFromBAP() {
+    // Check if buffer is initialized
+    if (BAPReadBuffer == nullptr) {
+        ESP_LOGE("BAP", "BAPReadBuffer not initialized");
+        return;
+    }
+    
+    // Check if there's actually data available in Serial2's buffer
     if (!Serial2.available()) {
         return;
     }
 
-    uint16_t dataLength = 0;
-    uint32_t startTime = millis();
+    // Read all available data from Serial2's buffer
+    int16_t bytes_read = Serial2.readBytes(BAPReadBuffer, BAPReadBufferLength);
+    ESP_LOGI("BAP", "Read %d bytes from Serial2 buffer", bytes_read);
     
-    // Clear the read buffer before reading new data
-    memset(BAPReadBuffer, 0, BAPReadBufferLength);
-    
-    // Read first byte (should be register)
-    int firstByte = Serial2.read();
-    if (firstByte == -1) {
-        Serial0.println("Failed to read register byte");
-        return;
+    // Log all bytes in one row
+    char log_buffer[1024];  // Adjust size as needed
+    int offset = 0;
+    offset += snprintf(log_buffer + offset, sizeof(log_buffer) - offset, "BAPReadBuffer: ");
+    for (int i = 0; i < bytes_read; i++) {
+        offset += snprintf(log_buffer + offset, sizeof(log_buffer) - offset, "POS:%d %02X ", i, BAPReadBuffer[i]);
     }
-    
-    BAPReadBuffer[0] = (uint8_t)firstByte;
-    dataLength++;
+    ESP_LOGI("BAP", "%s", log_buffer);
 
-    // Wait for length byte
-    while (!Serial2.available()) {
-        if (millis() - startTime > 1000) {  // 1 second timeout
-            Serial0.println("Timeout waiting for length byte");
-            return;
-        }
-        yield();
-    }
+    // Process messages one by one
+    size_t current_pos = 0;
+    while (current_pos < bytes_read - 6) {
+        if (BAPReadBuffer[current_pos] == 0xFF && BAPReadBuffer[current_pos + 1] == 0xAA) {
+            uint8_t reg = BAPReadBuffer[current_pos + 2];
+            uint8_t dataLen = BAPReadBuffer[current_pos + 3];
+            
+            if (current_pos + 6 + dataLen <= bytes_read) {
+                
+                // Calculate CRC of received message
+                uint16_t received_crc = (BAPReadBuffer[current_pos + 4 + dataLen] << 8) | 
+                                      BAPReadBuffer[current_pos + 5 + dataLen];
+                
+                uint16_t calculated_crc = calculateCRC16(&BAPReadBuffer[current_pos + 2], dataLen + 2);
+                
+                ESP_LOGI("BAP", "Received CRC: 0x%04X, Calculated CRC: 0x%04X", 
+                         received_crc, calculated_crc);
 
-    // Read length byte
-    int lengthByte = Serial2.read();
-    if (lengthByte == -1) {
-        Serial0.println("Failed to read length byte");
-        return;
-    }
-
-    BAPReadBuffer[1] = (uint8_t)lengthByte;
-    dataLength++;
-
-    // Read remaining data based on length byte
-    uint8_t expectedLength = (uint8_t)lengthByte;
-    
-    // Sanity check on expected length
-    if (expectedLength > BAPReadBufferLength - 2) {
-        Serial0.printf("Expected length too large: %d", expectedLength);
-        return;
-    }
-
-    // Read the rest of the data
-    while (dataLength < (expectedLength + 2) && (millis() - startTime < 1000)) {
-        if (Serial2.available()) {
-            int byte = Serial2.read();
-            if (byte != -1) {
-                BAPReadBuffer[dataLength++] = (uint8_t)byte;
+                if (received_crc == calculated_crc) {
+                    processMessage(&BAPReadBuffer[current_pos], dataLen, reg);
+                } else {
+                    ESP_LOGE("BAP", "CRC Mismatch in message at position %d", current_pos);
+                }
+                
+                current_pos += 6 + dataLen;
+            } else {
+                // Incomplete message, wait for next read
+                break;
             }
+        } else {
+            current_pos++;
         }
-        yield();
-    }
-
-    // Validate the data
-    if (dataLength == BAPReadBuffer[1]+2)
-    {
-        //Print Success Messgae
-        Serial0.println("BAP Data Length Validated");
-
-        // Process the data
-        uint8_t reg = BAPReadBuffer[0];
-        uint8_t dataLen = BAPReadBuffer[1];
-        uint8_t* data = BAPReadBuffer + 2;
-
-        // Process the data based on the register
-        if (reg >= 0x21 && reg <= 0x26) 
-        {
-            handleNetworkDataSerial(BAPReadBuffer, dataLen);
-            Serial0.printf("Network Data Received for register 0x%02X", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial0.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-        else if (reg >= 0x30 && reg <= 0x35) 
-        {
-            handleMiningDataSerial(BAPReadBuffer, dataLen);
-            Serial0.printf("Mining Data Received for register 0x%02X", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-        else if (reg >= 0x40 && reg <= 0x46) 
-        {
-            handleMonitoringDataSerial(BAPReadBuffer, dataLen);
-            Serial0.printf("Monitoring Data Received for register 0x%02X", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-        else if (reg >= 0x50 && reg <= 0x54) 
-        {
-            handleDeviceStatusSerial(BAPReadBuffer, dataLen);
-            Serial0.printf("Device Status Data Received for register 0x%02X", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial0.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-        else if (reg >= 0x60 && reg <= 0x6C) 
-        {
-            handleAPIDataSerial(BAPReadBuffer, dataLen);
-            Serial0.printf("API Data Received for register 0x%02X", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial0.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-        else if (reg >= 0xE0 && reg <= 0xEF) 
-        {
-            handleFlagsDataSerial(BAPReadBuffer, dataLen);
-        }
-        else if (reg >= 0xF0 && reg <= 0xFF) 
-        {
-            handleSpecialRegistersSerial(BAPReadBuffer, dataLen);
-        }
-        else 
-        {
-            Serial0.printf("Error: Register 0x%02X outside of valid ranges", reg);
-            Serial0.printf("Raw Data: ");
-            for (int i = 0; i < dataLen + 2; i++)
-            {
-                Serial0.printf("%02X ", BAPReadBuffer[i]);
-            }
-        }
-    }
-    else
-    {
-        //Print Error Message
-        Serial0.printf("BAP Data Length Invalid");
-        Serial0.printf("Register: 0x%02X", BAPReadBuffer[0]);
-        Serial0.printf("Expected Length: %d, got %d", BAPReadBuffer[1]+2, dataLength);
     }
 }
 
 void writeDataToBAP(uint8_t* buffer, size_t dataLen, uint8_t reg) {
-    const size_t chunkSize = 32;
-    uint32_t serialWriteStartTime = millis();
+    // Calculate total size needed: preamble(2) + reg(1) + len(1) + data + CRC(2)
+    const size_t totalSize = 4 + dataLen + 2;
+    const int maxRetries = 3;  // Maximum number of retry attempts
+    int retryCount = 0;
     
-    // Prepare header: preamble (0xFF 0xAA), register, length
-    uint8_t header[4] = {
-        0xFF,           // Preamble byte
-        0xAA,           // Preamble byte
-        (uint8_t)dataLen,  // Length byte
-        reg             // Register byte
-    };
-
-    // Write header first
-    Serial2.write(header, 4);
-    delay(1); // Small delay after header
-
-    // Write data in chunks
-    size_t bytesWritten = 0;
-    while (bytesWritten < dataLen) {
-        // Calculate size of next chunk
-        size_t remainingBytes = dataLen - bytesWritten;
-        size_t currentChunkSize = __min(remainingBytes, chunkSize);
-
-        // Wait for serial to be ready
-        while (Serial2.availableForWrite() < currentChunkSize) {
-            if (millis() - serialWriteStartTime > 1000) {
-                Serial0.println("Timeout waiting for BAP to be ready");
-                return;
-            }
-            yield();
-        }
-
-        // Write chunk
-        Serial2.write(&buffer[bytesWritten], currentChunkSize);
-        bytesWritten += currentChunkSize;
-
-        // Debug output
-        Serial0.printf("Chunk written for reg 0x%02X: %d bytes (Total: %d/%d)\n", 
-                     reg, currentChunkSize, bytesWritten, dataLen);
+    while (retryCount < maxRetries) {
+        // Fill the write buffer
+        size_t offset = 0;
+        BAPWriteBuffer[0] = 0xFF;  // Preamble
+        BAPWriteBuffer[1] = 0xAA;  // Preamble
+        BAPWriteBuffer[2] = reg;   // Register
+        BAPWriteBuffer[3] = dataLen; // Length
         
-        delay(1); // Small delay between chunks
-    }
+        // Copy data
+        memcpy(&BAPWriteBuffer[4], buffer, dataLen);
 
-    // Debug output
-    Serial.printf("Write complete - Preamble: 0xAA, Register: 0x%02X, Length: %d\n", reg, dataLen);
-    Serial.print("Data: ");
-    for (int i = 0; i < dataLen; i++) {
-        Serial.printf("%02X ", buffer[i]);
+        // Calculate and append CRC - now only over reg + len + data
+        uint16_t calculatedCRC = calculateCRC16(&BAPWriteBuffer[2], dataLen + 2);
+        BAPWriteBuffer[dataLen + 4] = (calculatedCRC >> 8) & 0xFF;  // High byte
+        BAPWriteBuffer[dataLen + 5] = calculatedCRC & 0xFF;         // Low byte
+        ESP_LOGI("BAP", "CRC: 0x%04X", calculatedCRC);
+        ESP_LOGI("BAP", "BAPWriteBuffer: ");
+        for (int i = 0; i < totalSize; i++)
+        {
+            ESP_LOGI("BAP", "%02X ", BAPWriteBuffer[i]);
+        }
+        Serial0.printf("\n");
+
+        // Send everything in one write
+        Serial2.write(BAPWriteBuffer, totalSize);
+        // Wait for CRC Feedback
+        if (CRCRxCheck(calculatedCRC, 1000)) {
+            ESP_LOGI("BAP", "CRC Matched");
+            return;  // Success, exit function
+        }
+        
+        // If we get here, either CRC didn't match or we didn't get a response
+        retryCount++;
+        ESP_LOGE("BAP", "No valid CRC response, attempt %d of %d", retryCount, maxRetries);
+        if (retryCount < maxRetries) {
+            delay(500);  // Wait a bit before retrying
+            continue;    // Explicitly continue to next retry
+        }
     }
-    Serial.printf("\nTotal time: %lu ms\n", millis() - serialWriteStartTime);
-    delay(500); // Small delay after write in case of multiple writes
+    
+    ESP_LOGE("BAP", "Failed to send data after %d attempts", maxRetries);
 }
 
 void handleNetworkDataSerial(uint8_t* buffer, uint8_t len)
 {
     if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
     
     switch(reg) 
     {
         case LVGL_REG_SSID:
             memset(IncomingData.network.ssid, 0, MAX_SSID_LENGTH);
-            memcpy(IncomingData.network.ssid, &buffer[2], __min(dataLen, MAX_SSID_LENGTH - 1));
+            memcpy(IncomingData.network.ssid, &buffer[4], __min(dataLen, MAX_SSID_LENGTH - 1));
             break;
         case LVGL_REG_IP_ADDR:
             memset(IncomingData.network.ipAddress, 0, MAX_IP_LENGTH);
-            memcpy(IncomingData.network.ipAddress, &buffer[2], __min(dataLen, MAX_IP_LENGTH - 1));
+            memcpy(IncomingData.network.ipAddress, &buffer[4], __min(dataLen, MAX_IP_LENGTH - 1));
             break;
         case LVGL_REG_WIFI_STATUS:
             memset(IncomingData.network.wifiStatus, 0, MAX_STATUS_LENGTH);
-            memcpy(IncomingData.network.wifiStatus, &buffer[2], __min(dataLen, MAX_STATUS_LENGTH - 1));
+            memcpy(IncomingData.network.wifiStatus, &buffer[4], __min(dataLen, MAX_STATUS_LENGTH - 1));
             break;
         case LVGL_REG_POOL_URL:
             memset(IncomingData.network.poolUrl, 0, MAX_URL_LENGTH);
-            memcpy(IncomingData.network.poolUrl, &buffer[2], __min(dataLen, MAX_URL_LENGTH - 1));
+            memcpy(IncomingData.network.poolUrl, &buffer[4], __min(dataLen, MAX_URL_LENGTH - 1));
             break;
         case LVGL_REG_FALLBACK_URL:
             memset(IncomingData.network.fallbackUrl, 0, MAX_URL_LENGTH);
-            memcpy(IncomingData.network.fallbackUrl, &buffer[2], __min(dataLen, MAX_URL_LENGTH - 1));
+            memcpy(IncomingData.network.fallbackUrl, &buffer[4], __min(dataLen, MAX_URL_LENGTH - 1));
             break;
         case LVGL_REG_POOL_PORTS:
                 if (dataLen >= 4) 
             {
-                IncomingData.network.poolPort = (buffer[3] << 8) | buffer[2];
-                IncomingData.network.fallbackPort = (buffer[5] << 8) | buffer[4];
+                IncomingData.network.poolPort = (buffer[5] << 8) | buffer[4];
+                IncomingData.network.fallbackPort = (buffer[7] << 8) | buffer[6];
                 Serial.printf("Pool: %s : %d, Fallback: %s : %d\n", IncomingData.network.poolUrl, IncomingData.network.poolPort, IncomingData.network.fallbackUrl, IncomingData.network.fallbackPort);
             }
             break;
@@ -321,8 +352,8 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
 {
     if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
     
     switch(reg) {
         case LVGL_REG_TEMPS: 
@@ -334,10 +365,10 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
             } temp;
 
             // Read bytes in correct order (assuming little-endian)
-            temp.bytes[0] = buffer[6];
-            temp.bytes[1] = buffer[7];
-            temp.bytes[2] = buffer[8];
-            temp.bytes[3] = buffer[9];
+            temp.bytes[0] = buffer[8];
+            temp.bytes[1] = buffer[9];
+            temp.bytes[2] = buffer[10];
+            temp.bytes[3] = buffer[11];
 
             IncomingData.monitoring.temperatures[0] = temp.value;
             Serial.printf("Temperature received: %.2f°C\n", IncomingData.monitoring.temperatures[0]);
@@ -347,7 +378,7 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
         {
             float asicFreq;
             memset(&asicFreq, 0, sizeof(float));
-            memcpy(&asicFreq, &buffer[2], sizeof(float));
+            memcpy(&asicFreq, &buffer[4], sizeof(float));
             IncomingData.monitoring.asicFrequency = asicFreq;
             Serial.print("ASIC Frequency received: ");
             Serial.printf("%lu\n", IncomingData.monitoring.asicFrequency);
@@ -357,7 +388,7 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
         {
             float fanStats[2];  // Array to hold RPM and percentage
             memset(fanStats, 0, sizeof(float) * 2);
-            memcpy(fanStats, &buffer[2], __min(dataLen, sizeof(float) * 2));
+            memcpy(fanStats, &buffer[4], __min(dataLen, sizeof(float) * 2));
             IncomingData.monitoring.fanSpeed = fanStats[0];
             IncomingData.monitoring.fanSpeedPercent = fanStats[1];
             
@@ -370,7 +401,7 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
         {
             float powerStatsArray[4];
             memset(powerStatsArray, 0, sizeof(float) * 4);
-            memcpy(powerStatsArray, &buffer[2], __min(dataLen, sizeof(float) * 4));
+            memcpy(powerStatsArray, &buffer[4], __min(dataLen, sizeof(float) * 4));
             IncomingData.monitoring.powerStats.voltage = powerStatsArray[0];
             IncomingData.monitoring.powerStats.current = powerStatsArray[1];
             IncomingData.monitoring.powerStats.power = powerStatsArray[2];
@@ -385,19 +416,22 @@ void handleMonitoringDataSerial(uint8_t* buffer, uint8_t len)
         case LVGL_REG_ASIC_INFO:
         {
             memset(&IncomingData.monitoring.asicInfo, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.monitoring.asicInfo, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.monitoring.asicInfo, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             break;
         }
         case LVGL_REG_UPTIME:
         {
             memset(&IncomingData.monitoring.uptime, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.monitoring.uptime, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.monitoring.uptime, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             break;  
         }
-        case LVGL_REG_TARGET_VOLTAGE:
+        case LVGL_REG_VREG_TEMP:
         {
-            memset(&IncomingData.monitoring.targetDomainVoltage, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.monitoring.targetDomainVoltage, &buffer[2], __min(dataLen, MAX_UINT16_SIZE));
+            float vregTemp;
+            memset(&vregTemp, 0, sizeof(float));
+            memcpy(&vregTemp, &buffer[4], sizeof(float));
+            IncomingData.monitoring.vregTemp = vregTemp;
+            ESP_LOGI("BAP", "VREG Temperature received: %.2f°C", IncomingData.monitoring.vregTemp);
             break;
         }
         default:
@@ -412,37 +446,30 @@ void handleDeviceStatusSerial(uint8_t* buffer, uint8_t len)
 {
     // if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
     
     switch(reg)
     {
-        case LVGL_REG_DEVICE_INFO:
+        case LVGL_REG_DEVICE_SERIAL:
         {
-            memset(IncomingData.status.deviceInfo, 0, MAX_INFO_LENGTH);
-            memcpy(IncomingData.status.deviceInfo, &buffer[2], __min(dataLen, MAX_INFO_LENGTH - 1));
+            memset(IncomingData.status.serialNumber, 0, MAX_SERIAL_LENGTH);
+            memcpy(IncomingData.status.serialNumber, &buffer[4], __min(dataLen, MAX_SERIAL_LENGTH - 1));
+            ESP_LOGI("BAP", "Serial Number received: %s", IncomingData.status.serialNumber);
             break;
         }
-        case LVGL_REG_BOARD_INFO:
+        case LVGL_REG_BOARD_MODEL:
         {
-            memset(IncomingData.status.boardInfo, 0, MAX_INFO_LENGTH);
-            memcpy(IncomingData.status.boardInfo, &buffer[2], __min(dataLen, MAX_INFO_LENGTH - 1));
+            memset(IncomingData.status.chipModel, 0, MAX_MODEL_LENGTH);
+            memcpy(IncomingData.status.chipModel, &buffer[4], __min(dataLen, MAX_MODEL_LENGTH - 1));
+            ESP_LOGI("BAP", "Chip Model received: %s", IncomingData.status.chipModel);
             break;
         }
-        case LVGL_REG_CLOCK_SYNC:
+        case LVGL_REG_BOARD_FIRMWARE_VERSION:
         {
-            uint32_t timestamp;
-            memset(&timestamp, 0, MAX_UINT32_SIZE);
-            memcpy(&timestamp, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
-            IncomingData.status.clockSync = timestamp; // Subtract 6 hours to account for timezone TODO: make this dynamic
-            Serial.printf("Clock sync: %lu\n", timestamp);
-            if (timestamp > 946684800) 
-            {  // Basic sanity check (timestamp after year 2000)
-                setTime(timestamp);
-                Serial.printf("Time set to: %02d/%02d/%04d %02d:%02d:%02d\n", 
-                    month(), day(), year(),
-                    hour(), minute(), second());
-            }
+            memset(IncomingData.status.firmwareVersion, 0, MAX_FIRMWARE_VERSION_LENGTH);
+            memcpy(IncomingData.status.firmwareVersion, &buffer[4], __min(dataLen, MAX_FIRMWARE_VERSION_LENGTH - 1));
+            ESP_LOGI("BAP", "Firmware Version received: %s", IncomingData.status.firmwareVersion);
             break;
         }
         default:
@@ -458,8 +485,8 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
     // must be more than the register and length bytes
     if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
     
     
     switch(reg) 
@@ -468,7 +495,7 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         {
             float hashrate;
             memset(&hashrate, 0, sizeof(float));
-            memcpy(&hashrate, &buffer[2], sizeof(float));
+            memcpy(&hashrate, &buffer[4], sizeof(float));
             IncomingData.mining.hashrate = hashrate;
             Serial.print("Hashrate received: ");
             Serial.println(IncomingData.mining.hashrate);
@@ -478,7 +505,7 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         {
             float historicalHashrate;
             memset(&historicalHashrate, 0, sizeof(float));
-            memcpy(&historicalHashrate, &buffer[2], sizeof(float));
+            memcpy(&historicalHashrate, &buffer[4], sizeof(float));
             IncomingData.mining.historicalHashrate = historicalHashrate;
             Serial.print("Historical Hashrate received: ");
             Serial.println(IncomingData.mining.historicalHashrate);
@@ -488,7 +515,7 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         {
             float efficiency;
             memset(&efficiency, 0, sizeof(float));
-            memcpy(&efficiency, &buffer[2], sizeof(float));
+            memcpy(&efficiency, &buffer[4], sizeof(float));
             IncomingData.mining.efficiency = efficiency;
             Serial.print("Efficiency received: ");
             Serial.println(IncomingData.mining.efficiency);
@@ -497,7 +524,7 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         case LVGL_REG_BEST_DIFF:
         {
             memset(IncomingData.mining.bestDiff, 0, MAX_DIFF_LENGTH);
-            memcpy(IncomingData.mining.bestDiff, &buffer[2], __min(dataLen, MAX_DIFF_LENGTH - 1));
+            memcpy(IncomingData.mining.bestDiff, &buffer[4], __min(dataLen, MAX_DIFF_LENGTH - 1));
             IncomingData.mining.bestDiff[dataLen] = '\0';  // Null terminate the string
             Serial.print("Best Diff received: ");
             Serial.println(IncomingData.mining.bestDiff);
@@ -506,7 +533,7 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         case LVGL_REG_SESSION_DIFF:
         {
             memset(IncomingData.mining.sessionDiff, 0, MAX_DIFF_LENGTH);
-            memcpy(IncomingData.mining.sessionDiff, &buffer[2], __min(dataLen, MAX_DIFF_LENGTH - 1));
+            memcpy(IncomingData.mining.sessionDiff, &buffer[4], __min(dataLen, MAX_DIFF_LENGTH - 1));
             IncomingData.mining.sessionDiff[dataLen] = '\0';  // Null terminate the string
             Serial.print("Session Diff received: ");
             Serial.println(IncomingData.mining.sessionDiff);
@@ -517,8 +544,8 @@ void handleMiningDataSerial(uint8_t* buffer, uint8_t len)
         {
             memset(&IncomingData.mining.acceptedShares, 0, sizeof(uint32_t));
             memset(&IncomingData.mining.rejectedShares, 0, sizeof(uint32_t));
-            IncomingData.mining.acceptedShares = (buffer[2] << 0) | (buffer[3] << 8) | (buffer[4] << 16) | (buffer[5] << 24);
-            IncomingData.mining.rejectedShares = (buffer[6] << 0) | (buffer[7] << 8) | (buffer[8] << 16) | (buffer[9] << 24);
+            IncomingData.mining.acceptedShares = (buffer[4] << 0) | (buffer[5] << 8) | (buffer[6] << 16) | (buffer[7] << 24);
+            IncomingData.mining.rejectedShares = (buffer[8] << 0) | (buffer[9] << 8) | (buffer[10] << 16) | (buffer[11] << 24);
             IncomingData.mining.shares = IncomingData.mining.acceptedShares + IncomingData.mining.rejectedShares;
             Serial.printf("Accepted shares: %d, Rejected shares: %d, Total shares: %lu\n", 
                 IncomingData.mining.acceptedShares, 
@@ -544,64 +571,64 @@ void handleAPIDataSerial(uint8_t* buffer, uint8_t len)
 {
         if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
 
     switch(reg)
     {
         case LVGL_REG_API_BTC_PRICE:
         {
             memset(&IncomingData.api.btcPriceUSD, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.btcPriceUSD, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.btcPriceUSD, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("BTC Price received: %lu\n", IncomingData.api.btcPriceUSD);
             break;
         }
         case LVGL_REG_API_NETWORK_HASHRATE:
         {
             memset(&IncomingData.api.networkHashrate, 0, sizeof(double));
-            memcpy(&IncomingData.api.networkHashrate, &buffer[2], __min(dataLen, sizeof(double)));
+            memcpy(&IncomingData.api.networkHashrate, &buffer[4], __min(dataLen, sizeof(double)));
             Serial.printf("Network Hashrate received: %f\n", IncomingData.api.networkHashrate);
             break;
         }
         case LVGL_REG_API_NETWORK_DIFFICULTY:
         {
             memset(&IncomingData.api.networkDifficulty, 0, sizeof(double));
-            memcpy(&IncomingData.api.networkDifficulty, &buffer[2], __min(dataLen, sizeof(double)));
+            memcpy(&IncomingData.api.networkDifficulty, &buffer[4], __min(dataLen, sizeof(double)));
             Serial.printf("Network Difficulty received: %f\n", IncomingData.api.networkDifficulty);
             break;
         }
         case LVGL_REG_API_BLOCK_HEIGHT:
         {
             memset(&IncomingData.api.blockHeight, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.blockHeight, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.blockHeight, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Block Height received: %lu\n", IncomingData.api.blockHeight);
             break;
         }
         case LVGL_REG_API_DIFFICULTY_PROGRESS:
         {
             memset(&IncomingData.api.difficultyProgressPercent, 0, sizeof(double));
-            memcpy(&IncomingData.api.difficultyProgressPercent, &buffer[2], __min(dataLen, sizeof(double)));
+            memcpy(&IncomingData.api.difficultyProgressPercent, &buffer[4], __min(dataLen, sizeof(double)));
             Serial.printf("Difficulty Progress Percent received: %f\n", IncomingData.api.difficultyProgressPercent);
             break;
         }
         case LVGL_REG_API_DIFFICULTY_CHANGE:
         {
             memset(&IncomingData.api.difficultyChangePercent, 0, sizeof(double));
-            memcpy(&IncomingData.api.difficultyChangePercent, &buffer[2], __min(dataLen, sizeof(double)));
+            memcpy(&IncomingData.api.difficultyChangePercent, &buffer[4], __min(dataLen, sizeof(double)));
             Serial.printf("Difficulty Change Percent received: %f\n", IncomingData.api.difficultyChangePercent);
             break;
         }
         case LVGL_REG_API_REMAINING_BLOCKS:
         {
             memset(&IncomingData.api.remainingBlocksToDifficultyAdjustment, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.remainingBlocksToDifficultyAdjustment, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.remainingBlocksToDifficultyAdjustment, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Remaining Blocks to Difficulty Adjustment received: %lu\n", IncomingData.api.remainingBlocksToDifficultyAdjustment);
             break;
         }
         case LVGL_REG_API_REMAINING_TIME:
         {
             memset(&IncomingData.api.remainingTimeToDifficultyAdjustment, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.remainingTimeToDifficultyAdjustment, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.remainingTimeToDifficultyAdjustment, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             IncomingData.api.remainingTimeToDifficultyAdjustment /= 1000; // Convert from milliseconds to seconds?
             Serial.printf("Remaining Time to Difficulty Adjustment received: %lu\n", IncomingData.api.remainingTimeToDifficultyAdjustment);
             break;
@@ -609,35 +636,35 @@ void handleAPIDataSerial(uint8_t* buffer, uint8_t len)
         case LVGL_REG_API_FASTEST_FEE:
         {
             memset(&IncomingData.api.fastestFee, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.fastestFee, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.fastestFee, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Fastest Fee received: %lu\n", IncomingData.api.fastestFee);
             break;
         }
         case LVGL_REG_API_HALF_HOUR_FEE:
         {
             memset(&IncomingData.api.halfHourFee, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.halfHourFee, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.halfHourFee, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Half Hour Fee received: %lu\n", IncomingData.api.halfHourFee);
             break;
         }
         case LVGL_REG_API_HOUR_FEE:
         {
             memset(&IncomingData.api.hourFee, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.hourFee, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.hourFee, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Hour Fee received: %lu\n", IncomingData.api.hourFee);
             break;
         }
         case LVGL_REG_API_ECONOMY_FEE:
         {
             memset(&IncomingData.api.economyFee, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.economyFee, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.economyFee, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Economy Fee received: %lu\n", IncomingData.api.economyFee);
             break;
         }
         case LVGL_REG_API_MINIMUM_FEE:
         {
             memset(&IncomingData.api.minimumFee, 0, MAX_UINT32_SIZE);
-            memcpy(&IncomingData.api.minimumFee, &buffer[2], __min(dataLen, MAX_UINT32_SIZE));
+            memcpy(&IncomingData.api.minimumFee, &buffer[4], __min(dataLen, MAX_UINT32_SIZE));
             Serial.printf("Minimum Fee received: %lu\n", IncomingData.api.minimumFee);
             break;
         }
@@ -653,21 +680,21 @@ void handleFlagsDataSerial(uint8_t* buffer, uint8_t len)
 {
     //if (len < 2) return;
     
-    uint8_t reg = buffer[0];
-    uint8_t dataLen = buffer[1];
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
 
     switch(reg)
     {
         case LVGL_FLAG_STARTUP_DONE:
         {
-            specialRegisters.startupDone = buffer[2];
+            specialRegisters.startupDone = buffer[4];
             Serial.printf("Startup Done flag received: %d\n", specialRegisters.startupDone);
             break;
         }
         case LVGL_FLAG_OVERHEAT_MODE:
         {
-            specialRegisters.overheatMode = buffer[2];  // Keep raw incoming data
-            bool currentFlag = buffer[2];
+            specialRegisters.overheatMode = buffer[4];  // Keep raw incoming data
+            bool currentFlag = buffer[4];
             
             if (currentFlag) {
                 overheatModeCounter++;
@@ -688,8 +715,8 @@ void handleFlagsDataSerial(uint8_t* buffer, uint8_t len)
         }
         case LVGL_FLAG_FOUND_BLOCK:
         {
-            specialRegisters.foundBlock = buffer[2];  // Keep raw incoming data
-            bool currentFlag = buffer[2];
+            specialRegisters.foundBlock = buffer[4];  // Keep raw incoming data
+            bool currentFlag = buffer[4];
             
             if (currentFlag) {
                 foundBlockCounter++;
@@ -718,7 +745,49 @@ void handleFlagsDataSerial(uint8_t* buffer, uint8_t len)
 
 void handleSpecialRegistersSerial(uint8_t* buffer, uint8_t len)
 {
-    return;
+    uint8_t reg = buffer[2];
+    uint8_t dataLen = buffer[3];
+
+    switch(reg)
+    {
+        case LVGL_REG_SPECIAL_THEME:
+        {
+            memset(IncomingData.status.theme, 0, MAX_THEME_LENGTH);
+            memcpy(IncomingData.status.theme, &buffer[4], __min(dataLen, MAX_THEME_LENGTH - 1));
+            IncomingData.status.theme[dataLen] = '\0';  // Null terminate the string
+            ESP_LOGI("BAP", "Theme received: %s", IncomingData.status.theme);
+            break;
+        }
+        case LVGL_REG_SPECIAL_PRESET:
+        {
+            memset(IncomingData.status. preset, 0, MAX_PRESET_LENGTH);
+            memcpy(IncomingData.status.preset, &buffer[4], __min(dataLen, MAX_PRESET_LENGTH - 1));
+            IncomingData.status.preset[dataLen] = '\0';  // Null terminate the string
+            ESP_LOGI("BAP", "Preset received: %s", IncomingData.status.preset);
+            // save to NVS
+            saveSettingsToNVSasString(NVS_KEY_ASIC_PRESET_NAME, IncomingData.status.preset, sizeof(IncomingData.status.preset));
+            // update UI
+
+            // uncheck all modes
+            lv_obj_clear_state(quietMode, LV_STATE_CHECKED);
+            lv_obj_clear_state(balancedMode, LV_STATE_CHECKED);
+            lv_obj_clear_state(turboMode, LV_STATE_CHECKED);
+            if (strcmp(IncomingData.status.preset, "quiet") == 0) {
+                lv_obj_add_state(quietMode, LV_STATE_CHECKED);
+            } else if (strcmp(IncomingData.status.preset, "balanced") == 0) {
+                lv_obj_add_state(balancedMode, LV_STATE_CHECKED);
+            } else if (strcmp(IncomingData.status.preset, "turbo") == 0) {
+                lv_obj_add_state(turboMode, LV_STATE_CHECKED);
+            }
+            break;
+
+        }
+        default:
+        {
+            ESP_LOGW("BAP", "Unknown special register 0x%02X with length %d", reg, dataLen);
+            break;
+        }
+    }
 }
 
 void sendRestartToBAP()
@@ -738,4 +807,4 @@ void sendRestartToBAP()
     return;
 }
 
-#endif
+

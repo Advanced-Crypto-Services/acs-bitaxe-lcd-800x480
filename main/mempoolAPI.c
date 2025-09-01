@@ -145,6 +145,18 @@ static esp_err_t priceEventHandler(esp_http_client_event_t *evt)
                         MEMPOOL_STATE.priceValid = true;
                         ESP_LOGE("HTTP API", "Price USD: %d", priceUSD->valueint);
                     }
+                    cJSON *priceEUR = cJSON_GetObjectItem(json, "EUR");
+                    if (priceEUR != NULL && cJSON_IsNumber(priceEUR)) {
+                        MEMPOOL_STATE.priceEUR = priceEUR->valueint;
+                        MEMPOOL_STATE.priceEURValid = true;
+                        ESP_LOGE("HTTP API", "Price EUR: %d", priceEUR->valueint);
+                    }
+                    cJSON *priceCAD = cJSON_GetObjectItem(json, "CAD");
+                    if (priceCAD != NULL && cJSON_IsNumber(priceCAD)) {
+                        MEMPOOL_STATE.priceCAD = priceCAD->valueint;
+                        MEMPOOL_STATE.priceCADValid = true;
+                        ESP_LOGE("HTTP API", "Price CAD: %d", priceCAD->valueint);
+                    }
                     cJSON_Delete(json);
                 }
                 free(responseBuffer);
@@ -467,6 +479,8 @@ static esp_err_t networkSummaryEventHandler(esp_http_client_event_t *evt)
 
                     // Parse prices (if needed, though you might want to use the dedicated price endpoint)
                     cJSON *prices = cJSON_GetObjectItem(json, "prices");
+                    cJSON *priceCAD = cJSON_GetObjectItem(prices, "CAD");
+                    cJSON *priceEUR = cJSON_GetObjectItem(prices, "EUR");
                     if (prices != NULL) {
                         cJSON *priceUSD = cJSON_GetObjectItem(prices, "USD");
                         if (priceUSD && cJSON_IsNumber(priceUSD)) {
@@ -474,7 +488,19 @@ static esp_err_t networkSummaryEventHandler(esp_http_client_event_t *evt)
                             MEMPOOL_STATE.priceValid = true;
                             ESP_LOGI("HTTP API", "Price USD: %lu", MEMPOOL_STATE.priceUSD);
                         }
+                        if (priceCAD && cJSON_IsNumber(priceCAD)) {
+                            MEMPOOL_STATE.priceCAD = priceCAD->valueint;
+                            MEMPOOL_STATE.priceCADValid = true;
+                            ESP_LOGI("HTTP API", "Price CAD: %lu", MEMPOOL_STATE.priceCAD);
+                        }
+                        if (priceEUR && cJSON_IsNumber(priceEUR)) {
+                            MEMPOOL_STATE.priceEUR = priceEUR->valueint;
+                            MEMPOOL_STATE.priceEURValid = true;
+                            ESP_LOGI("HTTP API", "Price EUR: %lu", MEMPOOL_STATE.priceEUR);
+                        }
+                        
                     }
+                    
 
                     cJSON_Delete(json);
                 }

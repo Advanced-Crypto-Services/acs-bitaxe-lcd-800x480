@@ -13,6 +13,7 @@
 
 #define NVS_KEY_THEME "themePreset"
 #define NVS_KEY_FIRST_BOOT "firstBoot"
+#define NVS_KEY_TUTORIAL_COMPLETED "tutorialDone"
 
 #define NVS_KEY_WIFI_SSID1 "wifiSSID1"
 #define NVS_KEY_WIFI_PASSWORD1 "wifiPassword1"
@@ -27,6 +28,8 @@
 #define NVS_KEY_ASIC_CURRENT_FAN_SPEED "currentFSp"
 #define NVS_KEY_ASIC_CURRENT_AUTO_FAN_SPEED "currentAFSp"
 #define NVS_KEY_ASIC_AUTOTUNE_ENABLED "AutoTuneEn"
+#define NVS_KEY_ASIC_PRESET_NAME "presetName"
+
 
 
 extern void initializeNVS(void);

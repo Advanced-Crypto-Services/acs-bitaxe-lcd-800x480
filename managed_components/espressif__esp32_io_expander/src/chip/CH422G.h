@@ -68,7 +68,7 @@ public:
      * @note  The driver initialization by default sets CH422G's IO0-7 to output high-level mode.
      *
      */
-    void begin(void) override;
+    esp_err_t begin(void) override;
 
     /**
      * @brief Enable OC0-OC3 output open-drain

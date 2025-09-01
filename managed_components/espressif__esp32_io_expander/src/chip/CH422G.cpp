@@ -80,9 +80,10 @@ ESP_IOExpander_CH422G::~ESP_IOExpander_CH422G()
     }
 }
 
-void ESP_IOExpander_CH422G::begin(void)
+esp_err_t ESP_IOExpander_CH422G::begin(void)
 {
-    CHECK_ERROR_RETURN(esp_io_expander_new_i2c_ch422g(i2c_id, i2c_address, &handle));
+    esp_err_t ret = esp_io_expander_new_i2c_ch422g(i2c_id, i2c_address, &handle);
+    return ret;
 }
 
 void ESP_IOExpander_CH422G::enableOC_OpenDrain(void)

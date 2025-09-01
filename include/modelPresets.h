@@ -1,7 +1,6 @@
 #pragma once
 #include "Arduino.h"
 #include "BAP.h"
-#include "I2CData.h"
 #include "modelConfig.h"
 
 
@@ -10,13 +9,13 @@ extern uint16_t currentPresetVoltage;
 extern uint8_t currentPresetFanSpeed;
 extern bool currentPresetAutoFanMode;
 
-extern const uint16_t voltageLowPower;
-extern const uint16_t voltageNormalPower;
-extern const uint16_t voltageHighPower;
+extern const uint16_t voltageQuiet;
+extern const uint16_t voltageBalanced;
+extern const uint16_t voltageTurbo;
 
-extern const uint16_t freqLowPower;
-extern const uint16_t freqNormalPower;
-extern const uint16_t freqHighPower;
+extern const uint16_t freqQuiet;
+extern const uint16_t freqBalanced;
+extern const uint16_t freqTurbo;
 
 extern uint16_t frequencyOffset;
 extern uint16_t voltageOffset;
@@ -28,10 +27,8 @@ extern uint16_t autotuneTempHighTarget;
 
 
 
-extern void setLowPowerPreset();
-extern void setNormalPowerPreset();
-extern void setHighPowerPreset();
+extern void setQuietPreset();
+extern void setBalancedPreset();
+extern void setTurboPreset();
 
-extern void readCurrentPresetSettingsFromNVS();
-extern void presetAutoTune();
-extern bool isValidPresetPair(uint16_t freq, uint16_t voltage);
+

@@ -4,6 +4,7 @@
 #include "wifiFeatures.h"
 
 #define SMOOTHING_WINDOW_SIZE 5
+#define GRAPH_MAX_VARIATIONS 3  // Maximum number of graph types per container
 
 extern const lv_img_dsc_t Logos;
 extern const lv_img_dsc_t Splash;
@@ -24,7 +25,20 @@ extern lv_obj_t* tabMining;
 extern lv_obj_t* tabActivity;
 extern lv_obj_t* tabBitcoinNews;
 extern lv_obj_t* tabSettings;
+extern lv_obj_t* networkSettingsContainer;
+extern lv_obj_t* networkSettingsContainerConnectedState;
+extern lv_obj_t* webUIqrCode;
+extern lv_obj_t* currentIPContainer;
+extern lv_obj_t* webUIVersionContainer;
+extern lv_obj_t* ssidContainer;
+extern lv_obj_t* connectQrCodeContainer;
+extern lv_obj_t* LCDotaAddressLabel;
+extern lv_obj_t* LCDotaQRCode;
+extern char LCDotaAddressLabelText[100];
 
+extern lv_obj_t* quietMode;
+extern lv_obj_t* balancedMode;
+extern lv_obj_t* turboMode;
 
 enum ScreenType 
 {
@@ -45,18 +59,19 @@ struct ScreenObjects
     lv_obj_t* homeMainContainer;
     lv_obj_t* miningMainContainer;
     lv_obj_t* activityMainContainer;
-    lv_obj_t* bitcoinNewsMainContainer;
+    lv_obj_t* btcStatsMainContainer;
     lv_obj_t* settingsMainContainer;
-    lv_timer_t* labelUpdateTimer;
-    lv_timer_t* chartUpdateTimer;
+    lv_timer_t* deviceStatsLabelsUpdateTimer;
+    lv_timer_t* miningStatsLabelsUpdateTimer;
     lv_timer_t* statusBarUpdateTimer;
     lv_timer_t* clockTimer;
-    lv_timer_t* apiUpdateTimer;
     lv_timer_t* autoTuneSettingsTimer;
-
+    lv_timer_t* btcStatsLabelsUpdateTimer;
+    lv_timer_t* chartUpdateTimer;
+    lv_obj_t* settingTabView;
 };
 
-// Declare the struct type
+// Declare the struct type This is currently unused
 struct SettingsTextAreas {
     lv_obj_t* hostnameTextArea;
     lv_obj_t* wifiTextArea;
@@ -73,7 +88,6 @@ struct SettingsTextAreas {
     lv_obj_t* asicVoltageTextArea;
 };
 
-
 extern SettingsTextAreas settingsTextAreas;
 extern ScreenObjects screenObjs;
 extern WifiNetworkScan* storedNetworks;
@@ -81,16 +95,12 @@ extern uint16_t* storedNetworkCount;
 
 // global variables
 extern ScreenType activeScreen;
-extern lv_timer_t* chartUpdateTimer;
 extern lv_timer_t* networkUpdateTimer;
 extern lv_timer_t* autoTuneSettingsTimer;
 
 extern lv_obj_t* splashScreenContainer;
 
 extern float calculateMovingAverage(float newValue);
-extern void hashrateGraph(lv_obj_t* parent);
-
-
 
 // graph buffer
 extern float hashrateBuffer[SMOOTHING_WINDOW_SIZE];
@@ -107,3 +117,9 @@ extern void showSettingsConfirmationOverlay();
 extern void showOverheatOverlay();
 extern void showBlockFoundOverlay();
 extern void setupSettingsScreen();
+
+extern void quadContainer(lv_obj_t* parentMainContainer, lv_obj_t*& container1, lv_obj_t*& container2, lv_obj_t*& container3, lv_obj_t*& container4);
+extern void quadContainerContent(lv_obj_t* container1, const char* Title, const char* Value);
+
+extern void graphContainer(lv_obj_t* parentMainContainer, lv_obj_t*& container);
+extern void graphContainerContent(lv_obj_t* container, const char* title, const char* currentValue, const char* bottomLeftLabel, const char* bottomRightLabel);

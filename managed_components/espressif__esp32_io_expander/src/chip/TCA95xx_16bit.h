@@ -62,7 +62,7 @@ public:
      * @brief Begin IO expander
      *
      */
-    void begin(void) override;
+    esp_err_t begin(void) override;
 };
 
 /**

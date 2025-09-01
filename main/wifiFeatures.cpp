@@ -6,14 +6,18 @@
 #include <esp_log.h>
 #include <NVS.h>
 #include "BAP.h"
-#include "I2CData.h"
 #include "Clock.h"
+#include "freertos/semphr.h"
+
+
 #define MAX_NETWORKS 20
 #define MAX_SSID_SCAN_LENGTH 33
 
 // Static PSRAM array to store networks
 WifiNetworkScan* storedNetworks = nullptr;
 uint16_t* storedNetworkCount = nullptr;
+
+extern SemaphoreHandle_t wifiMutex;
 
 void inistialiseWifiScanBuffers() {
     storedNetworks = (WifiNetworkScan*)heap_caps_malloc(
@@ -24,11 +28,12 @@ void inistialiseWifiScanBuffers() {
 
 void listNetworks() {
     // Start WiFi scan
-
+    if (wifiMutex)xSemaphoreTake(wifiMutex, portMAX_DELAY);
     int numNetworks = WiFi.scanNetworks();
     
     if (numNetworks == -1) {
         Serial.println("WiFi scan failed!");
+        if (wifiMutex)xSemaphoreGive(wifiMutex);
         return;
     }
     
@@ -38,6 +43,7 @@ void listNetworks() {
             sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (!storedNetworkCount) {
             Serial.println("Failed to allocate network count storage!");
+            if (wifiMutex)xSemaphoreGive(wifiMutex);
             return;
         }
     }
@@ -48,6 +54,7 @@ void listNetworks() {
             sizeof(WifiNetworkScan) * MAX_NETWORKS, MALLOC_CAP_SPIRAM);
         if (!storedNetworks) {
             Serial.println("Failed to allocate network storage in PSRAM!");
+            if (wifiMutex)xSemaphoreGive(wifiMutex);
             return;
         }
     }
@@ -76,9 +83,11 @@ void listNetworks() {
 
     Serial0.printf("Free heap: %lu\n", ESP.getFreeHeap());
     Serial0.printf("Minimum free heap: %lu\n", ESP.getMinFreeHeap());
+    if (wifiMutex)xSemaphoreGive(wifiMutex);
 }
 
 void reconnectWifi() {
+    if (wifiMutex)xSemaphoreTake(wifiMutex, portMAX_DELAY);
      static uint32_t lastWifiCheck = 0;
      const char* TAG = "WiFi";
      static char wifiSSID1[MAX_SSID_LENGTH];
@@ -108,11 +117,12 @@ void reconnectWifi() {
             
             if (WiFi.status() == WL_CONNECTED) {
                 ESP_LOGI(TAG, "WiFi reconnected successfully");
-                espTime();
+                //espTime();
             } else {
                 ESP_LOGI(TAG, "WiFi reconnection failed");
             }
         }
         lastWifiCheck = millis();
     }
+    if (wifiMutex)xSemaphoreGive(wifiMutex);
 }

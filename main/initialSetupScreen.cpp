@@ -6,7 +6,6 @@
 #include <WebServer.h>
 #include "UIHandler.h"
 #include "UISharedAssets.h"
-#include "I2CData.h"
 #include "fonts.h"
 #include <TimeLib.h>
 #include "BAP.h"
@@ -67,6 +66,7 @@ static lv_obj_t* setupLaterButton = NULL;
 static lv_obj_t* setupLaterButtonLabel = NULL;
 static lv_obj_t* backButton = NULL;
 static lv_obj_t* backButtonLabel = NULL;
+static lv_obj_t* wifiRescanButton = NULL;
 
 static void httpServerQRCode(lv_obj_t* parent);
 void initSetupSplashScreen();
@@ -152,23 +152,13 @@ static void finishSetup(const char* btcAddress)
             writeDataToBAP((uint8_t*)BAPStratumPortFallbackBuffer, sizeof(BAPStratumPortFallbackBuffer), BAP_STRATUM_PORT_FALLBACK_BUFFER_REG);
         }
         // set asic settings
-            setNormalPowerPreset(); 
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_VOLTAGE, (uint16_t)((BAPAsicVoltageBuffer[0] << 8) | BAPAsicVoltageBuffer[1]));
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_FREQ, (uint16_t)((BAPAsicFreqBuffer[0] << 8) | BAPAsicFreqBuffer[1]));
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_FAN_SPEED, (uint16_t)((BAPFanSpeedBuffer[0] << 8) | BAPFanSpeedBuffer[1]));
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_CURRENT_AUTO_FAN_SPEED, (uint16_t)((BAPAutoFanSpeedBuffer[0] << 8) | BAPAutoFanSpeedBuffer[1]));
-            uint8_t autotuneEnabledSave = autoTuneEnabled;
-            saveSettingsToNVSasU16(NVS_KEY_ASIC_AUTOTUNE_ENABLED, autotuneEnabledSave);
-            writeDataToBAP(BAPFanSpeedBuffer, 2, BAP_FAN_SPEED_BUFFER_REG);
-            writeDataToBAP(BAPAutoFanSpeedBuffer, 2, BAP_AUTO_FAN_SPEED_BUFFER_REG);
-            writeDataToBAP(BAPAsicVoltageBuffer, 2, BAP_ASIC_VOLTAGE_BUFFER_REG);
-            writeDataToBAP(BAPAsicFreqBuffer, 2, BAP_ASIC_FREQ_BUFFER_REG);
-
-
+            setBalancedPreset(); 
             delay(200);
             // Create new splash screen while keeping old screens hidden
             Serial0.println("Creating new splash screen");
             splashScreen();
+            // refresh splash screen
+            lv_refr_now(NULL);
             Serial0.println("New splash screen created");
             delay(20);
             // set first boot to true
@@ -188,6 +178,8 @@ static void finishSetup(const char* btcAddress)
             Serial0.println("Triggering cleanup");
             esp_restart();
             initialSetupComplete = true;
+            // reset tutorial completed
+            saveSettingsToNVSasU16(NVS_KEY_TUTORIAL_COMPLETED, 0);
         }
 
 
@@ -477,6 +469,7 @@ static void wifiListEventHandler(lv_event_t* e) {
     strncpy(tempWifiSSID, selectedSsid, sizeof(tempWifiSSID) - 1);
     tempWifiSSID[sizeof(tempWifiSSID) - 1] = '\0'; // Ensure null termination
     lv_obj_add_flag(wifiList, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifiRescanButton, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(wifiSsidTextArea, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(wifiPasswordTextArea, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(confirmWifiBtn, LV_OBJ_FLAG_HIDDEN);
@@ -714,21 +707,21 @@ void initSetupWifiScreen()
     Serial0.println("wifiList Populated");
 
     // Rescan Button
-    lv_obj_t* rescanButton = lv_btn_create(wifiDiscoveredNetworksContainer);
-    lv_obj_set_size(rescanButton, 128, 48);
-    lv_obj_align(rescanButton, LV_ALIGN_BOTTOM_MID, 0, 16);
-    lv_obj_set_style_bg_color(rescanButton, theme->primaryColor, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(rescanButton, LV_OPA_100, LV_PART_MAIN);
-    lv_obj_add_flag(rescanButton, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(rescanButton, rescanButtonEventHandler, LV_EVENT_CLICKED, NULL);
+    wifiRescanButton = lv_btn_create(wifiDiscoveredNetworksContainer);
+    lv_obj_set_size(wifiRescanButton, 128, 48);
+    lv_obj_align(wifiRescanButton, LV_ALIGN_BOTTOM_MID, 0, 16);
+    lv_obj_set_style_bg_color(wifiRescanButton, theme->primaryColor, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(wifiRescanButton, LV_OPA_100, LV_PART_MAIN);
+    lv_obj_add_flag(wifiRescanButton, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(wifiRescanButton, rescanButtonEventHandler, LV_EVENT_CLICKED, NULL);
 
     //rescan button label
-    lv_obj_t* rescanButtonLabel = lv_label_create(rescanButton);
-    lv_label_set_text(rescanButtonLabel, "Rescan");
-    lv_obj_set_style_text_font(rescanButtonLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(rescanButtonLabel, theme->backgroundColor, LV_PART_MAIN);
-    lv_obj_set_style_text_opa(rescanButtonLabel, LV_OPA_100, LV_PART_MAIN);
-    lv_obj_center(rescanButtonLabel);
+    lv_obj_t* wifiRescanButtonLabel = lv_label_create(wifiRescanButton);
+    lv_label_set_text(wifiRescanButtonLabel, "Rescan");
+    lv_obj_set_style_text_font(wifiRescanButtonLabel, theme->fontMedium16, LV_PART_MAIN);
+    lv_obj_set_style_text_color(wifiRescanButtonLabel, theme->backgroundColor, LV_PART_MAIN);
+    lv_obj_set_style_text_opa(wifiRescanButtonLabel, LV_OPA_100, LV_PART_MAIN);
+    lv_obj_center(wifiRescanButtonLabel);
     
 
     
@@ -754,7 +747,7 @@ void initSetupWifiScreen()
     // add a button to confirm the wifi setup
     confirmWifiBtn = lv_btn_create(wifiDiscoveredNetworksContainer);
     lv_obj_set_size(confirmWifiBtn, 128, 48);
-    lv_obj_align(confirmWifiBtn, LV_ALIGN_BOTTOM_MID, 0, 16);
+    lv_obj_align(confirmWifiBtn, LV_ALIGN_BOTTOM_MID, 128, 0);
     lv_obj_set_style_bg_color(confirmWifiBtn, theme->primaryColor, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(confirmWifiBtn, LV_OPA_100, LV_PART_MAIN);
     lv_obj_add_flag(confirmWifiBtn, LV_OBJ_FLAG_HIDDEN);
@@ -769,15 +762,15 @@ void initSetupWifiScreen()
     // add a Back button
     backtoWifiSelectionButton = lv_btn_create(wifiDiscoveredNetworksContainer);
     lv_obj_set_size(backtoWifiSelectionButton, 128, 48);
-    lv_obj_align(backtoWifiSelectionButton, LV_ALIGN_BOTTOM_MID, 0, -48);
+    lv_obj_align_to(backtoWifiSelectionButton, confirmWifiBtn, LV_ALIGN_LEFT_MID, -256, 0);
     lv_obj_set_style_bg_color(backtoWifiSelectionButton, theme->primaryColor, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(backtoWifiSelectionButton, LV_OPA_100, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(backtoWifiSelectionButton, LV_OPA_0, LV_PART_MAIN);
     lv_obj_add_flag(backtoWifiSelectionButton, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(backtoWifiSelectionButton, backtoWifiSelectionButtonEventHandler, LV_EVENT_CLICKED, NULL);
     lv_obj_t* backtoWifiSelectionButtonLabel = lv_label_create(backtoWifiSelectionButton);
     lv_label_set_text(backtoWifiSelectionButtonLabel, "Back");
     lv_obj_set_style_text_font(backtoWifiSelectionButtonLabel, theme->fontMedium16, LV_PART_MAIN);
-    lv_obj_set_style_text_color(backtoWifiSelectionButtonLabel, theme->backgroundColor, LV_PART_MAIN);
+    lv_obj_set_style_text_color(backtoWifiSelectionButtonLabel, theme->textColor, LV_PART_MAIN);
     lv_obj_set_style_text_opa(backtoWifiSelectionButtonLabel, LV_OPA_100, LV_PART_MAIN);
     lv_obj_center(backtoWifiSelectionButtonLabel);
     lv_obj_add_flag(backtoWifiSelectionButton, LV_OBJ_FLAG_HIDDEN);
@@ -1029,7 +1022,7 @@ static void initSetupQRCodeScreen(lv_obj_t* parent)
 
     // Setup QR Code
     const char* qrCodeText = "https://www.advancedcryptoservices.com/bitaxe-support";
-    lv_obj_t* qrCode = lv_qrcode_create(qrCodeContainer,128,theme->primaryColor,theme->backgroundColor);
+    lv_obj_t* qrCode = lv_qrcode_create(qrCodeContainer,128,lv_color_hex(0xffffff),theme->backgroundColor);
     lv_qrcode_update(qrCode, qrCodeText, strlen(qrCodeText));
     lv_obj_align(qrCode, LV_ALIGN_CENTER, 0, 32);
 }
@@ -1071,7 +1064,7 @@ static void httpServerQRCode(lv_obj_t* parent)
     lv_obj_align(ipAddressLabel, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     // Setup QR Code 
-    lv_obj_t* qrCode = lv_qrcode_create(httpServerQRCodeContainer,128,theme->primaryColor,theme->backgroundColor);
+    lv_obj_t* qrCode = lv_qrcode_create(httpServerQRCodeContainer,128,lv_color_hex(0xffffff),theme->backgroundColor);
     lv_qrcode_update(qrCode, qrCodeBuffer, strlen(qrCodeBuffer));
     lv_obj_align(qrCode, LV_ALIGN_CENTER, 0, 16);
 }

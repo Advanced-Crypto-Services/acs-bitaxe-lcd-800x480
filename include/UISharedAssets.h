@@ -15,9 +15,12 @@ extern lv_obj_t* mainContainerObj;
 extern lv_timer_t* statusBarTimer;
 
 extern lv_obj_t* statusBarObj;
+extern lv_obj_t* leftTab;
+
 extern lv_obj_t* wifiIcon;
 extern lv_obj_t* tempIcon;
 extern lv_obj_t* cpuIcon;
 extern lv_obj_t* pwrIcon;
 extern lv_obj_t* btcPrice;
+
 

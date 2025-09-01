@@ -58,9 +58,10 @@ ESP_IOExpander_TCA95xx_16bit::~ESP_IOExpander_TCA95xx_16bit()
 
 static esp_err_t esp_io_expander_new_i2c_tca95xx_16bit(i2c_port_t i2c_num, uint32_t i2c_address, esp_io_expander_handle_t *handle);
 
-void ESP_IOExpander_TCA95xx_16bit::begin(void)
+esp_err_t ESP_IOExpander_TCA95xx_16bit::begin(void)
 {
-    CHECK_ERROR_RETURN(esp_io_expander_new_i2c_tca95xx_16bit(i2c_id, i2c_address, &handle));
+    esp_err_t ret = esp_io_expander_new_i2c_tca95xx_16bit(i2c_id, i2c_address, &handle);
+    return ret;
 }
 
 static esp_err_t read_input_reg(esp_io_expander_handle_t handle, uint32_t *value);

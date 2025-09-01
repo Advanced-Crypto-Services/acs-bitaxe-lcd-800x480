@@ -17,7 +17,6 @@
 #include <lv_conf.h>
 #include <ESP_Panel_Library.h>
 #include <ESP_IOExpander_Library.h>
-#include "I2CData.h"
 #include <TimeLib.h>
 
 #include <esp_wifi.h>
@@ -42,15 +41,16 @@
 #include "esp_netif.h"
 #include "esp_event.h"
 #include "esp_sntp.h"
+#include "driver/ledc.h"
+#include "lcdSettings.h"
+#include "freertos/semphr.h"
+#include "tutorialScreen.h"
+#include "UISharedAssets.h"
+
+SemaphoreHandle_t wifiMutex = nullptr;
 
 
-#define TP_RST 1
-#define LCD_BL 2
-#define LCD_RST 3
-#define SD_CS 4
-#define USB_SEL 5
-
-
+void setBrightness(uint8_t value);
 
 void printMemoryInfo() 
 {
@@ -77,6 +77,11 @@ void listSpiffsContents() {
     }
 }
 
+
+
+
+
+
 extern "C" void app_main()
 {
     initArduino();
@@ -96,34 +101,10 @@ extern "C" void app_main()
     setupBAP();
     Serial0.println("BAP Initialized");
     delay(20);
- //Initialize IO Expander
-    pinMode(GPIO_INPUT_IO_4, OUTPUT);
-    /**
-     * These development boards require the use of an IO expander to configure the screen,
-     * so it needs to be initialized in advance and registered with the panel for use.
-     *
-     */
-    Serial0.println("Initialize IO expander");
-    /* Initialize IO expander */
-    ESP_IOExpander *expander = new ESP_IOExpander_CH422G((i2c_port_t)I2C_MASTER_NUM, ESP_IO_EXPANDER_I2C_CH422G_ADDRESS, I2C_MASTER_SCL_IO, I2C_MASTER_SDA_IO);
-    // ESP_IOExpander *expander = new ESP_IOExpander_CH422G(I2C_MASTER_NUM, ESP_IO_EXPANDER_I2C_CH422G_ADDRESS_000);
-    expander->init();
-    expander->begin();
-    expander->multiPinMode(TP_RST | LCD_BL | LCD_RST | SD_CS | USB_SEL, OUTPUT);
-    expander->multiDigitalWrite(TP_RST | LCD_BL | LCD_RST, HIGH);
-    
-    
-    
-    //gt911 initialization, must be added, otherwise the touch screen will not be recognized  
-    //initialization begin
-    expander->multiDigitalWrite(TP_RST | LCD_RST, LOW);
-    
-    digitalWrite(GPIO_INPUT_IO_4, LOW);
-    
-    expander->multiDigitalWrite(TP_RST | LCD_RST, HIGH);
-    
-    //initialization end
-    
+ 
+    // Initialize IO Expander
+    initializeIOExpander();
+
     //Initialize Panel
     Serial.println("Initialize panel device");
     ESP_Panel *panel = new ESP_Panel();
@@ -155,7 +136,7 @@ extern "C" void app_main()
     Serial0.println("Theme initialized");
     Serial0.printf("Theme: %d\n", loadThemeFromNVS());
     delay(20);
-
+    wifiMutex = xSemaphoreCreateMutex();
     WiFi.mode(WIFI_STA);
     // Scan networks
     Serial0.println("Scanning WiFi networks...");
@@ -247,9 +228,16 @@ extern "C" void app_main()
         switchToScreen(activeScreenHome);
     }
     */
-   readCurrentPresetSettingsFromNVS();
+   
+    if (WiFi.status() == WL_CONNECTED)
+    {
+        mempool_api_network_summary();
+    }
+
+   espTime();
    initalizeOneScreen();
    switchToScreen(activeScreenHome);
+
    
     
     Serial0.println("LVGL porting example end");
@@ -262,14 +250,38 @@ extern "C" void app_main()
         (float)LV_IMG_CACHE_DEF_SIZE / 1024.0);
 
         delay(20);
-            if (WiFi.status() == WL_CONNECTED)
-    {
-        mempool_api_network_summary();
+
+    
+/*
+    // One-time sweep test (if that's what you want)
+    if (backlightPWM) {
+        // Sweep up
+        for (uint8_t i = 1; i <= 254; i++) {
+            setBrightness(i);
+            ESP_LOGI("Backlight", "PWM Value: %d", i);
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        
+        // Sweep down
+        for (uint8_t i = 254; i >= 1; i--) {
+            setBrightness(i);
+            ESP_LOGI("Backlight", "PWM Value: %d", i);
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        
+        // Set final brightness
+        setBrightness(25);  // Or whatever final brightness you want
     }
+*/
+if (loadSettingsFromNVSasU16(NVS_KEY_TUTORIAL_COMPLETED) == 0)
+   {
+    lv_obj_add_flag(statusBarObj, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(leftTab, LV_OBJ_FLAG_HIDDEN);
+    tutorialScreen();
+   }
 
-    espTime();
-
-    //main loop
 while (true)
     {
         if (WiFi.status() == WL_CONNECTED)
@@ -316,26 +328,52 @@ while (true)
         showOverheatOverlay();
         showBlockFoundOverlay();
             lastFlagCheck = millis();
+
+        // check for wifi to choose whcih wifi settings screen to show
+        static bool connectedWifiScreen = false;
+        static bool disconnectedWifiScreen = false;
+        static String previousIP = "";
         
+        if (WiFi.status() == WL_CONNECTED && strlen(IncomingData.network.ipAddress) > 0)
+        {
+            String currentIP = IncomingData.network.ipAddress;
+            String versionString = "";
+            if (IncomingData.status.firmwareVersion != versionString)
+            {
+                versionString = IncomingData.status.firmwareVersion;
+                lv_label_set_text(lv_obj_get_child(webUIVersionContainer, 1), versionString.c_str());
+            }
+
+            if (!connectedWifiScreen || currentIP != previousIP)
+            {   
+                
+                connectedWifiScreen = true;
+                previousIP = currentIP;
+                lv_obj_clear_flag(networkSettingsContainerConnectedState, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(networkSettingsContainer, LV_OBJ_FLAG_HIDDEN);
+                
+                static char ipString[16];
+                sprintf(ipString, "%s", currentIP.c_str());
+                static String ssidString = WiFi.SSID();
+                
+
+                 lv_qrcode_update(webUIqrCode, ipString, strlen(ipString));
+                 lv_label_set_text(lv_obj_get_child(currentIPContainer, 1), ipString);
+                 
+                 lv_label_set_text(lv_obj_get_child(ssidContainer, 1), ssidString.c_str());
+            }
+            
+        }
+        else
+        {
+                lv_obj_add_flag(networkSettingsContainerConnectedState, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_clear_flag(networkSettingsContainer, LV_OBJ_FLAG_HIDDEN);
+                disconnectedWifiScreen = true;
+
+        }
+       
     }
-        
-    static uint32_t lastAutoTuneCheck = 0;
-    static bool firstAutoTune = true;
-    float asicTemp = IncomingData.monitoring.temperatures[0];
-    
-    if (millis() - lastAutoTuneCheck > (firstAutoTune ? 600000 : 120000))  // 10 min for first check so bitaxe stabilizes, 60 sec after.
-    {
-        ESP_LOGI("AutoTune", "Autotune Timer Expired"); 
-        presetAutoTune();
-        lastAutoTuneCheck = millis();
-        firstAutoTune = false;
-    }
-    if (asicTemp >= 67 && (millis() - lastAutoTuneCheck > 1000)) { //  Instantly if temp is too high
-        ESP_LOGI("AutoTune", "Asic Temp: %.2f", asicTemp);
-        ESP_LOGI("AutoTune", "Asic Temp Overhead. Tweaking Settings Temp: %.2f", asicTemp);
-        presetAutoTune(); 
-        lastAutoTuneCheck = millis();
-    }
+ 
     reconnectWifi();
     }
 
