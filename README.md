@@ -2,8 +2,18 @@
 
 # Features
 The Display has a UI built around making the Bitaxe easier to setup for new users, as well as displaying useful data about both the bitaxe as well as the bitcoin network.
-
-- more information here: https://help.advancedcryptoservices.com/en/collections/12812285-bitaxe-support
+## Clock App
+![clock](https://github.com/user-attachments/assets/6460f6f8-b876-4093-869d-65e22d126602)
+## BTC Network Page
+![btc](https://github.com/user-attachments/assets/c09b1477-a1ac-4a95-8ff1-c1095743bca2)
+## Live Hashrate Graph
+![graph](https://github.com/user-attachments/assets/883fb0fa-9656-4e1b-bc1e-83c6c7724c15)
+## Activity Screen
+![activity](https://github.com/user-attachments/assets/489f8fcc-ebb8-440c-8097-288d82179537)
+## Multiple Themes
+![themes](https://github.com/user-attachments/assets/72587bb3-01df-4dfb-8196-f8cf96fe109f)
+## Setting Screens
+![settings](https://github.com/user-attachments/assets/26890be8-e027-469e-b222-749325916e6a)
 
 ## Initial Setup Made Easy
 ![initial setup](https://github.com/user-attachments/assets/c2dd6f02-b743-44c3-b04e-cb0f09b9aa46)

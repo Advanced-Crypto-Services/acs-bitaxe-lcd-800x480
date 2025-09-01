@@ -1592,6 +1592,9 @@ lv_group_add_obj(radio_group, turboMode);
     if (isThemeAvailable(THEME_SOLO_MINING_CO)) {
         lv_dropdown_add_option(themeDropdown, "SOLO MINING CO", LV_DROPDOWN_POS_LAST);
     }
+    if (isThemeAvailable(THEME_HOBBYIST_MINER)) {
+        lv_dropdown_add_option(themeDropdown, "HOBBYIST MINER", LV_DROPDOWN_POS_LAST);
+    }
 
     // Add spacing at the end of the list to make last option selectable
     lv_dropdown_add_option(themeDropdown, "", LV_DROPDOWN_POS_LAST);

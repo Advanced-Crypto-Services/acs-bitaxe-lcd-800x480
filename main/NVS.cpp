@@ -31,6 +31,9 @@ themePreset_t loadThemeFromNVS(void) {
     if (SPIFFS.exists("/UILogoJADE.png")) {
         themeValue = 2; // Blockstream Jade theme
     } 
+    if (SPIFFS.exists("/theHobbyistMiner.png")) {
+        themeValue = 6; // Hobbyist Miner theme
+    }
 
     if (err == ESP_OK) {
         err = nvs_get_u8(nvsHandle, NVS_KEY_THEME, &themeValue);

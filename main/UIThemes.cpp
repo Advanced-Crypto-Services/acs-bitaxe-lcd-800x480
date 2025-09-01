@@ -51,6 +51,8 @@ bool isThemeAvailable(themePreset_t theme) {
             return SPIFFS.exists("/SoloSatoshiSmallLogo.png");
         case THEME_SOLO_MINING_CO:
             return SPIFFS.exists("/soloMiningCo.png");
+        case THEME_HOBBYIST_MINER:
+            return SPIFFS.exists("/theHobbyistMiner.png");
         default:
             return false;
     }
@@ -191,11 +193,39 @@ void initializeTheme(themePreset_t preset) {
                     .themePreset = THEME_SOLO_MINING_CO,
                     .themeName = "THEME_SOLO_MINING_CO"
                 };
+                break;
             } else {
                 currentTheme = defaultTheme;
             }
             break;
-        
+
+        case THEME_HOBBYIST_MINER:
+            if (SPIFFS.exists("/theHobbyistMiner.png")) {
+                currentTheme = (uiTheme_t){
+                    .primaryColor = lv_color_hex(0xB20F32),
+                    .secondaryColor = lv_color_hex(0x7AAACF),
+                    .backgroundColor = lv_color_hex(0x00002A),
+                    .textColor = lv_color_hex(0xffffffff),
+                    .borderColor = lv_color_hex(0x427BAA),
+                    .defaultOpacity = 80,
+                    .backgroundOpacity = 40,
+                    .fontExtraBold144 = &interExtraBold144,
+                    .fontExtraBold72 = &interExtraBold72,
+                    .fontExtraBold56 = &interExtraBold56,
+                    .fontExtraBold32 = &interExtraBold32,
+                    .fontMedium24 = &interMedium24,
+                    .fontMedium16 = &interMedium16_19px,
+                    .background = "S:/UIBackgroundTheHM.png",
+                    .logo1 = "S:/Logos.png",
+                    .logo2 = "S:/theHobbyistMiner.png",
+                    .themePreview = "S:/theHobbyistMiner.png",
+                    .themePreset = THEME_HOBBYIST_MINER,
+                    .themeName = "THEME_HOBBYIST_MINER"
+                };
+            } else {
+                currentTheme = defaultTheme;
+            }
+            break;
         default:
             currentTheme = defaultTheme;
             break;

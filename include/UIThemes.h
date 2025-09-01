@@ -10,6 +10,7 @@ typedef enum {
     THEME_BLOCKSTREAM_BLUE = 3,
     THEME_SOLO_SATOSHI = 4,
     THEME_SOLO_MINING_CO = 5,
+    THEME_HOBBYIST_MINER = 6
 } themePreset_t;
 
 
