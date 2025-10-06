@@ -1592,6 +1592,12 @@ lv_group_add_obj(radio_group, turboMode);
     if (isThemeAvailable(THEME_SOLO_MINING_CO)) {
         lv_dropdown_add_option(themeDropdown, "SOLO MINING CO", LV_DROPDOWN_POS_LAST);
     }
+    if (isThemeAvailable(THEME_TBC)) {
+        lv_dropdown_add_option(themeDropdown, "TBC RED", LV_DROPDOWN_POS_LAST);
+    }
+    if (isThemeAvailable(THEME_TBC_ALT)) {
+        lv_dropdown_add_option(themeDropdown, "TBC BLUE", LV_DROPDOWN_POS_LAST);
+    }
 
     // Add spacing at the end of the list to make last option selectable
     lv_dropdown_add_option(themeDropdown, "", LV_DROPDOWN_POS_LAST);
@@ -2276,6 +2282,12 @@ static void themeDropdownEventHandler(lv_event_t* e) {
         }
         else if (strcmp(themeBuffer, "SOLO MINING CO") == 0) {
             selectedTheme = THEME_SOLO_MINING_CO;
+        }
+        else if (strcmp(themeBuffer, "TBC RED") == 0) {
+            selectedTheme = THEME_TBC;
+        }
+        else if (strcmp(themeBuffer, "TBC BLUE") == 0) {
+            selectedTheme = THEME_TBC_ALT;
         }
 
         // Only initialize theme if it's available

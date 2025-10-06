@@ -31,6 +31,9 @@ themePreset_t loadThemeFromNVS(void) {
     if (SPIFFS.exists("/UILogoJADE.png")) {
         themeValue = 2; // Blockstream Jade theme
     } 
+    else if (SPIFFS.exists("/TBCLogo.png")) {
+        themeValue = 6; // TBC theme
+    }
 
     if (err == ESP_OK) {
         err = nvs_get_u8(nvsHandle, NVS_KEY_THEME, &themeValue);

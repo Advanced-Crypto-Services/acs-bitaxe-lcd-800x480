@@ -51,6 +51,10 @@ bool isThemeAvailable(themePreset_t theme) {
             return SPIFFS.exists("/SoloSatoshiSmallLogo.png");
         case THEME_SOLO_MINING_CO:
             return SPIFFS.exists("/soloMiningCo.png");
+        case THEME_TBC:
+            return SPIFFS.exists("/UIBackgroundTBC.png");
+        case THEME_TBC_ALT:
+            return SPIFFS.exists("/UIBackgroundTBC.png");
         default:
             return false;
     }
@@ -196,6 +200,61 @@ void initializeTheme(themePreset_t preset) {
             }
             break;
         
+        case THEME_TBC:
+            if (SPIFFS.exists("/TBCLogo.png")) {
+            currentTheme = (uiTheme_t){
+                .primaryColor = lv_color_hex(0xEC1C2F),
+                .secondaryColor = lv_color_hex(0x00458B),
+                .backgroundColor = lv_color_hex(0x1A1717),
+                .textColor = lv_color_hex(0xffffff),
+                .borderColor = lv_color_hex(0xEC1C2F),
+                .defaultOpacity = 80,
+                .backgroundOpacity = 40,
+                .fontExtraBold144 = &interExtraBold144,
+                .fontExtraBold72 = &interExtraBold72,
+                .fontExtraBold56 = &interExtraBold56,
+                .fontExtraBold32 = &interExtraBold32,
+                .fontMedium24 = &interMedium24,
+                .fontMedium16 = &interMedium16_19px,
+                .background = "S:/UIBackgroundTBC.png",
+                .logo1 = "na.png",
+                .logo2 = "S:/TBCLogo.png",
+                .themePreview = "S:/TBCLogo.png",
+                .themePreset = THEME_TBC,
+                .themeName = "THEME_TBC"
+            };
+            } else {
+                currentTheme = defaultTheme;
+            }
+            break;
+
+            case THEME_TBC_ALT:
+            if (SPIFFS.exists("/TBCLogo.png")) {
+            currentTheme = (uiTheme_t){
+                .primaryColor = lv_color_hex(0x00458B),
+                .secondaryColor = lv_color_hex(0x00458B),
+                .backgroundColor = lv_color_hex(0x1A1717),
+                .textColor = lv_color_hex(0xffffff),
+                .borderColor = lv_color_hex(0xEC1C2F),
+                .defaultOpacity = 80,
+                .backgroundOpacity = 40,
+                .fontExtraBold144 = &interExtraBold144,
+                .fontExtraBold72 = &interExtraBold72,
+                .fontExtraBold56 = &interExtraBold56,
+                .fontExtraBold32 = &interExtraBold32,
+                .fontMedium24 = &interMedium24,
+                .fontMedium16 = &interMedium16_19px,
+                .background = "S:/UIBackgroundTBC.png",
+                .logo1 = "na.png",
+                .logo2 = "S:/TBCLogo.png",
+                .themePreview = "S:/TBCLogo.png",
+                .themePreset = THEME_TBC_ALT,
+                .themeName = "THEME_TBC_ALT"
+            };
+            } else {
+                currentTheme = defaultTheme;
+            }
+            break;
         default:
             currentTheme = defaultTheme;
             break;

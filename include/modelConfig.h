@@ -7,11 +7,11 @@
 // Firmware version
 #define MajorVersion 0
 #define MinorVersion 3
-#define PatchVersion 0
+#define PatchVersion 1
 #define VersionNote "Release"
 
 // Firmware build date
-#define BuildDate "06-04-2025"
+#define BuildDate "10-6-2025"
 
 
 
