@@ -17,3 +17,4 @@ extern int32_t timeOffsetMinutes;
 extern char offsetHoursStr[10];
 extern char offsetMinutesStr[10];
 extern void setTimeOffset(int32_t offsetHours, int32_t offsetMinutes = 0);
+extern void setFirstBootTime();

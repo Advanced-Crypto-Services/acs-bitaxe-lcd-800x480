@@ -147,9 +147,9 @@ extern "C" void app_main()
         {
         
         delay(20);
-        
+        setFirstBootTime();
         delay(20);
-        initialSetupScreen();
+        initialSetupScreen(); // This calls esp_restart, below is not reachable
         }
     
 

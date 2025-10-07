@@ -109,3 +109,10 @@ void setTimeOffset(int32_t offsetHours, int32_t offsetMinutes) {
     saveSettingsToNVSasString(NVS_KEY_TIME_OFFSET_HOURS, offsetHoursStr, sizeof(offsetHoursStr));
     saveSettingsToNVSasString(NVS_KEY_TIME_OFFSET_MINUTES, offsetMinutesStr, sizeof(offsetMinutesStr));
 }
+
+/* Set Time to CDT by default
+* 
+*/
+void setFirstBootTime (){
+    setTimeOffset(-5, 0);
+}
